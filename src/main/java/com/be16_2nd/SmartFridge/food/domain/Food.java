@@ -40,8 +40,6 @@ public class Food {
     private String memo;
     @Column(nullable = false)
     private Boolean isShared;
-    @Column(nullable = false)
-    private Boolean isTemp;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "member_id")
@@ -56,7 +54,6 @@ public class Food {
         this.expirationDateTime = expirationDateTime;
         this.memo =  foodUpdateDto.getMemo();
         this.isShared = foodUpdateDto.getShareable();
-        this.isTemp = foodUpdateDto.getIsTemp();
         return this;
     }
 

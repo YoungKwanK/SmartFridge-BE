@@ -106,12 +106,12 @@ public class FoodService {
 
         // 사용자의 역할을 확인합니다.
         if (context.type() == Type.MANAGER) {
-            // MANAGER는 냉장고의 모든 음식 통계를 조회합니다. (임시 등록 포함)
+            // MANAGER는 냉장고의 모든 음식 통계를 조회합니다.
             totalCount = foodRepository.countByFridgeId(fridgeId);
             expiredCount = foodRepository.countByFridgeIdAndExpirationDateTimeBefore(fridgeId, now);
             expiringSoonCount = foodRepository.countByFridgeIdAndExpirationDateTimeBetween(fridgeId, now, threeDaysLater);
         } else {
-            // COMMON 사용자는 자신이 등록한 음식 통계만 조회합니다. (임시 등록 포함)
+            // COMMON 사용자는 자신이 등록한 음식 통계만 조회합니다.
             UUID memberId = context.member().getId();
             totalCount = foodRepository.countByFridgeIdAndMemberId(fridgeId, memberId);
             expiredCount = foodRepository.countByFridgeIdAndMemberIdAndExpirationDateTimeBefore(fridgeId, memberId, now);
@@ -150,7 +150,7 @@ public class FoodService {
             if (StringUtils.hasText(searchDto.getFoodName())) {
                 predicateList.add(cb.like(root.get("name"), "%" + searchDto.getFoodName() + "%"));
             }
-            // 유통기한 및 임시보관 필터
+            // 유통기한 필터
             addFilterPredicate(predicateList, searchDto.getFilterType(), cb, root);
 
             return cb.and(predicateList.toArray(new Predicate[0]));
@@ -164,21 +164,15 @@ public class FoodService {
         LocalDateTime now = LocalDateTime.now();
         LocalDate today = LocalDate.now();
         switch (filterType) {
-            case TEMP_ONLY:
-                predicates.add(cb.equal(root.get("isTemp"), true));
-                break;
             case EXPIRED:
-                predicates.add(cb.equal(root.get("isTemp"), false));
                 predicates.add(cb.lessThan(root.get("expirationDateTime"), now));
                 break;
             case EXPIRES_TODAY:
-                predicates.add(cb.equal(root.get("isTemp"), false));
                 LocalDateTime startOfToday = today.atStartOfDay();
                 LocalDateTime endOfToday = today.plusDays(1).atStartOfDay();
                 predicates.add(cb.between(root.get("expirationDateTime"), startOfToday, endOfToday));
                 break;
             case EXPIRES_IN_THREE_DAYS:
-                predicates.add(cb.equal(root.get("isTemp"), false));
                 LocalDateTime threeDaysLater = today.plusDays(3).atStartOfDay();
                 predicates.add(cb.between(root.get("expirationDateTime"), now, threeDaysLater));
                 break;

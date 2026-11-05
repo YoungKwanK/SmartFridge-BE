@@ -25,5 +25,4 @@ public class FoodUpdateDto {
 
     private String memo;
     private Boolean shareable;
-    private Boolean isTemp;
 }
