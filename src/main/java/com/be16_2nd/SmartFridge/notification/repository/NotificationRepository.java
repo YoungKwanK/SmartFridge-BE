@@ -7,9 +7,13 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
@@ -35,4 +39,13 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
             Long fridgeId,
             List<NotificationType> notificationTypes
     );
+
+    // 본인 알림만 조회 (다른 사용자의 알림 id 로는 찾을 수 없음)
+    Optional<Notification> findByIdAndReceiver(Long id, Member receiver);
+
+    // 본인 알림 중 안 읽은 것만 한 번에 읽음 처리
+    @Modifying(clearAutomatically = true)
+    @Query("update Notification n set n.isRead = true " +
+            "where n.id in :ids and n.receiver = :receiver and n.isRead = false")
+    int markAsRead(@Param("ids") List<Long> ids, @Param("receiver") Member receiver);
 }
