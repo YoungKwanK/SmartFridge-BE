@@ -12,6 +12,7 @@ import com.be16_2nd.SmartFridge.fridge.repository.FridgeMemberRepository;
 import com.be16_2nd.SmartFridge.inquiry.domain.Inquiry;
 import com.be16_2nd.SmartFridge.inquiryComment.domain.InquiryComment;
 import com.be16_2nd.SmartFridge.member.domain.Member;
+import com.be16_2nd.SmartFridge.member.repository.MemberRepository;
 import com.be16_2nd.SmartFridge.notification.domain.Notification;
 import com.be16_2nd.SmartFridge.notification.domain.NotificationSettingType;
 import com.be16_2nd.SmartFridge.notification.domain.NotificationType;
@@ -27,6 +28,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,6 +45,7 @@ public class NotificationService {
     private final NotificationSettingService notificationSettingService;
     private final FridgeAccessValidator fridgeAccessValidator;
     private final FridgeMemberRepository fridgeMemberRepository;
+    private final MemberRepository memberRepository;
 
     public void create(Member sender, Member receiver,
                               NotificationType notificationType, Object entity) {
@@ -229,7 +232,8 @@ public class NotificationService {
     
     // 알림 삭제
     public void deleteNotification(Long notificationId) {
-        Notification notification = notificationRepository.findById(notificationId)
+        // 본인 알림만 삭제 가능 (다른 사용자의 알림 id 는 존재하지 않는 알림으로 처리)
+        Notification notification = notificationRepository.findByIdAndReceiver(notificationId, getCurrentMember())
                 .orElseThrow(() -> new EntityNotFoundException("존재하지 않는 알림입니다."));
         notificationRepository.delete(notification);
     }
@@ -238,15 +242,19 @@ public class NotificationService {
     public void readNotification(List<NotificationReadReqDto> notificationReadReqDtoList) {
 
         if (!notificationReadReqDtoList.isEmpty()) {
+            List<Long> notificationIds = notificationReadReqDtoList.stream()
+                    .map(dto -> dto.notificationId)
+                    .toList();
 
-            for (NotificationReadReqDto dto : notificationReadReqDtoList) {
-                Notification notification = notificationRepository.findById(dto.notificationId)
-                                        .orElseThrow(() -> new EntityNotFoundException("존재하지 않는 알림입니다."));
-
-                // 읽음 처리 (isRead : false -> true)
-                notification.setRead(true);
-            }
+            // 본인 알림 중 안 읽은 것만 벌크 UPDATE 1번으로 읽음 처리
+            notificationRepository.markAsRead(notificationIds, getCurrentMember());
         }
+    }
+
+    private Member getCurrentMember() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return memberRepository.findByEmail(email)
+                .orElseThrow(() -> new EntityNotFoundException("없는 사용자입니다."));
     }
 
     // 알림 배지에 표시할 최신 5개 알림
