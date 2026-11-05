@@ -19,6 +19,7 @@ import com.be16_2nd.SmartFridge.notification.service.NotificationService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -47,6 +48,13 @@ public class FridgeService {
     private final PostRepository postRepository;
     private final ChatService chatService;
 
+    @Value("${app.invite-base-url}")
+    private String inviteBaseUrl;
+
+    private String buildInviteLink(Fridge fridge) {
+        return inviteBaseUrl + "/" + fridge.getInviteCode();
+    }
+
     // 냉장고 + 관리자 멤버 + 관리자 1대1 채팅방을 한 트랜잭션으로 생성
     @Transactional
     public FridgeCreateResDto create(FridgeCreateDto fridgeCreateDto){
@@ -64,11 +72,10 @@ public class FridgeService {
                         .type(Type.MANAGER)
                         .build());
         fridge.setInviteCode(UUID.randomUUID().toString());
-        String inviteLink = fridge.getId() + fridge.getInviteCode();
         fridgeRepository.save(fridge);
         FridgeCreateResDto dto = FridgeCreateResDto.builder()
                 .fridgeId(fridge.getId())
-                .inviteLink(inviteLink)
+                .inviteLink(buildInviteLink(fridge))
                 .build();
         managerChatRoomLifecycle.createManagerChatRoom(member, fridge);
         return dto;
@@ -135,7 +142,8 @@ public class FridgeService {
         List<FridgeMember> fridgeMembers = fridgeMemberRepository.findAllByMember(member);
 
         return fridgeMembers.stream()
-                .map(fridgeMember -> FridgeListDto.from(fridgeMember))
+                .map(fridgeMember -> FridgeListDto.from(fridgeMember,
+                        fridgeMember.getType() == Type.MANAGER ? buildInviteLink(fridgeMember.getFridge()) : null))
                 .collect(Collectors.toList());
     }
 
@@ -150,7 +158,7 @@ public class FridgeService {
                 .orElseThrow(() -> new EntityNotFoundException("유효하지 않은 초대 코드입니다."));
 
         if (fridgeMemberRepository.existsByFridgeAndMember(fridge, member)) {
-            throw new IllegalArgumentException("이미 가입된 냉장고입니다.");
+            return fridge.getId();
         }
 
         fridgeMemberRepository.save(FridgeMember.builder()
