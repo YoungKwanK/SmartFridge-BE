@@ -195,7 +195,8 @@ public class FridgeService {
             throw new AccessDeniedException("COMMON만 나갈수 있습니다");
         } else {
             fridgeMemberRepository.deleteByFridgeAndMember(context.fridge(), context.member());
-            foodRepository.deleteAllByFridgeAndMember(context.fridge(), context.member());
+            // 식품은 삭제하지 않고 등록자 없음 + 공유 식품으로 남김
+            foodRepository.releaseAllByFridgeAndMember(context.fridge(), context.member());
             postRepository.deleteAllByFridgeAndMember(context.fridge(), context.member());
             managerChatRoomLifecycle.deleteManagerChatRoom(context.member(), context.fridge());
             chatService.leaveAllPurchaseChatRooms(context.fridge(), context.member());
@@ -248,6 +249,8 @@ public class FridgeService {
                 .orElseThrow(() -> new EntityNotFoundException("삭제할 멤버가 냉장고에 존재하지 않습니다."));
 
         fridgeMemberRepository.delete(fridgeMemberToDelete);
+        // 나가기와 같은 규칙: 강퇴된 멤버의 식품은 등록자 없음 + 공유 식품으로 남김
+        foodRepository.releaseAllByFridgeAndMember(fridge, memberToDelete);
         managerChatRoomLifecycle.deleteManagerChatRoom(memberToDelete, fridge);
         chatService.leaveForcePurchaseChatRoom(fridgeId, memberEmail);
     }

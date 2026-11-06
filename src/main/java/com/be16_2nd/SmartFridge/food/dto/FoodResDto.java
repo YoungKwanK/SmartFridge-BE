@@ -16,6 +16,8 @@ import java.time.LocalDateTime;
 @Data
 @Builder
 public class FoodResDto {
+    public static final String NO_REGISTRANT = "등록자 없음";
+
     private Long id;
     private String name;
     private String registeredName;
@@ -31,7 +33,8 @@ public class FoodResDto {
         return FoodResDto.builder()
                 .id(food.getId())
                 .name(food.getName())
-                .registeredName(food.getMember().getName()) // Member 연관관계 필요
+                // 등록자가 냉장고를 떠나면 member가 null이 됨
+                .registeredName(food.getMember() != null ? food.getMember().getName() : NO_REGISTRANT)
                 .quantity(food.getQuantity())
                 .storageStartDate(food.getStorageStartDate())
                 .expirationDateTime(food.getExpirationDateTime())
