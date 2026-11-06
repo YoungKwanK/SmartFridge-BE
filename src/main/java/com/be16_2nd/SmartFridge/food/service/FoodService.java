@@ -40,10 +40,21 @@ public class FoodService {
     private final NotificationService notificationService;
     private final FridgeMemberRepository fridgeMemberRepository;
 
-    public FoodResDto registerFood(Long fridgeId, FoodCreateDto foodCreateDto) {
+    private static final int MAX_REGISTER_COUNT = 30;
+
+    public List<FoodResDto> registerFood(Long fridgeId, List<FoodCreateDto> foodCreateDtoList) {
+        if (foodCreateDtoList == null || foodCreateDtoList.isEmpty()) {
+            throw new IllegalArgumentException("등록할 식품이 없습니다.");
+        }
+        if (foodCreateDtoList.size() > MAX_REGISTER_COUNT) {
+            throw new IllegalArgumentException("식품은 한 번에 최대 " + MAX_REGISTER_COUNT + "개까지 등록할 수 있습니다.");
+        }
+
         FridgeAccessValidator.FridgeContext context = fridgeAccessValidator.validate(fridgeId);
-        Food food = foodCreateDto.toEntity(context.member(), context.fridge());
-        Food savedFood = foodRepository.save(food);
+        List<Food> foods = foodCreateDtoList.stream()
+                .map(dto -> dto.toEntity(context.member(), context.fridge()))
+                .toList();
+        List<Food> savedFoods = foodRepository.saveAll(foods);
 
         Fridge fridge = context.fridge();
         Member receiver = fridgeMemberRepository.findByFridgeAndType(fridge, Type.MANAGER)
@@ -51,9 +62,11 @@ public class FoodService {
         Member sender = context.member();
 
         // 식자재 등록 알림 (사용자 -> 냉장고 관리자)
-        notificationService.create(sender, receiver, NotificationType.NEW_FOOD, food);
+        for (Food food : savedFoods) {
+            notificationService.create(sender, receiver, NotificationType.NEW_FOOD, food);
+        }
 
-        return FoodResDto.fromEntity(savedFood);
+        return savedFoods.stream().map(FoodResDto::fromEntity).toList();
     }
 
     @Transactional(readOnly = true)

@@ -11,6 +11,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/fridge/{fridgeId}/food")
@@ -20,8 +22,8 @@ public class FoodController {
 
     @PostMapping("/register")
     public ResponseEntity<?> registerFood(@PathVariable("fridgeId") Long fridgeId,
-                                          @RequestBody @Valid FoodCreateDto foodCreateDto) {
-        FoodResDto foodResponse = foodService.registerFood(fridgeId, foodCreateDto);
+                                          @RequestBody List<FoodCreateDto> foodCreateDtoList) {
+        List<FoodResDto> foodResponse = foodService.registerFood(fridgeId, foodCreateDtoList);
         return new ResponseEntity<>(
                 CommonDto.builder()
                         .result(foodResponse)
