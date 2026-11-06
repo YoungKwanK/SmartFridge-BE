@@ -26,7 +26,6 @@ public class FoodResDto {
     private StorageType storageType;
     private String memo;
     private Boolean shareable;
-    private Boolean isTemp;
 
     public static FoodResDto fromEntity(Food food) {
         return FoodResDto.builder()
@@ -40,7 +39,6 @@ public class FoodResDto {
                 .memo(food.getMemo())
                 .storageType(food.getStorageType())
                 .shareable(food.getIsShared())
-                .isTemp(food.getIsTemp())
                 .build();
     }
 }

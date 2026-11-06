@@ -23,12 +23,12 @@ public interface FoodRepository extends JpaRepository<Food, Long> {
     @Query("SELECT f FROM Food f WHERE FUNCTION('DATE', f.expirationDateTime) IN :dates")
     List<Food> findAllByExpirationDateIn(@Param("dates") List<LocalDate> dates);
 
-    // --- MANAGER용 메서드 (isTemp 조건 제거) ---
+    // --- MANAGER용 메서드 ---
     long countByFridgeId(Long fridgeId);
     long countByFridgeIdAndExpirationDateTimeBefore(Long fridgeId, LocalDateTime now);
     long countByFridgeIdAndExpirationDateTimeBetween(Long fridgeId, LocalDateTime start, LocalDateTime end);
 
-    // --- COMMON 사용자용 메서드 (isTemp 조건 제거) ---
+    // --- COMMON 사용자용 메서드 ---
     long countByFridgeIdAndMemberId(Long fridgeId, UUID userId);
     long countByFridgeIdAndMemberIdAndExpirationDateTimeBefore(Long fridgeId, UUID userId, LocalDateTime now);
     long countByFridgeIdAndMemberIdAndExpirationDateTimeBetween(Long fridgeId, UUID userId, LocalDateTime start, LocalDateTime end);
