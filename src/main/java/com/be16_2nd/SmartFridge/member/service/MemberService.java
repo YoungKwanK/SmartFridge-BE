@@ -16,6 +16,7 @@ import com.be16_2nd.SmartFridge.member.repository.MemberRepository;
 import com.be16_2nd.SmartFridge.notification.domain.NotificationSetting;
 import com.be16_2nd.SmartFridge.notification.dto.NotificationSettingDto;
 import com.be16_2nd.SmartFridge.notification.repository.NotificationSettingRepository;
+import com.be16_2nd.SmartFridge.food.repository.FoodRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +45,7 @@ public class MemberService {
     private final PostCommentRepository postCommentRepository;
     private final NotificationSettingRepository notificationSettingRepository;
     private final FridgeMemberRepository fridgeMemberRepository;
+    private final FoodRepository foodRepository;
 
     // 일반(이메일/비밀번호) 로그인은 관리자 계정만 허용
     public Member doAdminLogin(LoginReqDto loginReqDto){
@@ -119,6 +121,8 @@ public class MemberService {
                 throw new IllegalArgumentException("관리자인 냉장고가 있습니다. 먼저 권한을 이전해주세요");
             }
         }
+        // 냉장고 나가기와 같은 규칙: 식품은 등록자 없음 + 공유 식품으로 남김 (회원 삭제 cascade로 지워지지 않게 먼저 처리)
+        foodRepository.releaseAllByMember(member);
         memberRepository.delete(member);
     }
 

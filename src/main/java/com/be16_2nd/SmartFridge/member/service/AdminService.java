@@ -1,5 +1,6 @@
 package com.be16_2nd.SmartFridge.member.service;
 
+import com.be16_2nd.SmartFridge.food.repository.FoodRepository;
 import com.be16_2nd.SmartFridge.fridge.domain.Type;
 import com.be16_2nd.SmartFridge.inquiry.domain.Inquiry;
 import com.be16_2nd.SmartFridge.inquiry.domain.InquiryStatus;
@@ -41,6 +42,7 @@ public class AdminService {
     private final NotificationRepository notificationRepository;
     private final InquiryCommentRepository inquiryCommentRepository;
     private final NotificationService notificationService;
+    private final FoodRepository foodRepository;
 
 
     @Transactional(readOnly = true)
@@ -52,6 +54,8 @@ public class AdminService {
     public Member deleteMember(String memberEmail){
         Member member = memberRepository.findByEmail(memberEmail)
                 .orElseThrow(()->new EntityNotFoundException("Member Not Found"));
+        // 회원 탈퇴와 같은 규칙: 식품은 등록자 없음 + 공유 식품으로 남김 (회원 삭제 cascade로 지워지지 않게 먼저 처리)
+        foodRepository.releaseAllByMember(member);
         memberRepository.delete(member);
         return member;
     }
