@@ -1,5 +1,6 @@
 package com.be16_2nd.SmartFridge.post.dto;
 
+import com.be16_2nd.SmartFridge.post.domain.PostCategory;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,6 +15,6 @@ import java.util.List;
 public class PostUpdateDto {
     private String title;
     private String content;
-    private Long categoryId;
+    private PostCategory category;
     private List<String> imageUrls;
 }

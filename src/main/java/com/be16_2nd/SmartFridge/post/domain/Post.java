@@ -7,6 +7,7 @@ import com.be16_2nd.SmartFridge.member.domain.Member;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -35,9 +36,15 @@ public class Post extends BaseTimeEntity {
     @JoinColumn(name = "member_id")
     private Member member;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "category_id")
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private PostCategory category;
+
+    // 상단 고정 여부와 고정한 시각 (공지사항만 고정 가능, 고정 글끼리는 최근에 고정한 글이 위)
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean pinned = false;
+    private LocalDateTime pinnedAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "fridge_id")
@@ -55,10 +62,21 @@ public class Post extends BaseTimeEntity {
     @Builder.Default
     private List<PostImage> images = new ArrayList<>();
 
-    public void updatePost(PostUpdateDto postUpdateDto, PostCategory postCateogory) {
+    public void updatePost(PostUpdateDto postUpdateDto) {
         this.title = postUpdateDto.getTitle();
         this.content = postUpdateDto.getContent();
-        this.category = postCateogory;
+        this.category = postUpdateDto.getCategory();
+        // 고정은 공지사항만 가능하므로, 다른 카테고리로 바꾸면 고정 해제
+        if (this.pinned && this.category != PostCategory.공지사항) {
+            this.pinned = false;
+            this.pinnedAt = null;
+        }
+    }
+
+    // 고정 / 해제 전환
+    public void togglePin() {
+        this.pinned = !this.pinned;
+        this.pinnedAt = this.pinned ? LocalDateTime.now() : null;
     }
 
     public void increaseCommentCount() {

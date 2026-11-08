@@ -88,6 +88,19 @@ public class PostController {
                 HttpStatus.OK);
     }
 
+    // 상단 고정 / 해제 전환 (냉장고 관리자만). result: 전환 후 고정 여부
+    @PatchMapping("/{postId}/pin")
+    public ResponseEntity<?> togglePin(@PathVariable("fridgeId") Long fridgeId, @PathVariable("postId") Long postId) {
+        boolean pinned = postService.togglePin(fridgeId, postId);
+        return new ResponseEntity<>(
+                CommonDto.builder()
+                        .result(pinned)
+                        .status_code(HttpStatus.OK.value())
+                        .status_message(pinned ? "게시글을 상단에 고정했습니다." : "게시글 고정을 해제했습니다.")
+                        .build(),
+                HttpStatus.OK);
+    }
+
     @GetMapping("/list")
     public ResponseEntity<?> postList(@PathVariable("fridgeId") Long fridgeId, Pageable pageable,
                                          @ModelAttribute PostSearchDto searchDto, @RequestParam(required = false, defaultValue = "전체") String category) {

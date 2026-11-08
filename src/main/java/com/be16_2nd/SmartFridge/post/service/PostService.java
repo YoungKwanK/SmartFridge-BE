@@ -6,7 +6,6 @@ import com.be16_2nd.SmartFridge.post.domain.Post;
 import com.be16_2nd.SmartFridge.post.domain.PostCategory;
 import com.be16_2nd.SmartFridge.post.domain.PostImage;
 import com.be16_2nd.SmartFridge.post.dto.*;
-import com.be16_2nd.SmartFridge.post.repository.PostCategoryRepository;
 import com.be16_2nd.SmartFridge.post.repository.PostImageRepository;
 import com.be16_2nd.SmartFridge.post.repository.PostRepository;
 import com.be16_2nd.SmartFridge.common.service.PostStatsService;
@@ -35,6 +34,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -47,7 +47,6 @@ public class PostService {
     private final FridgeAccessValidator fridgeAccessValidator;
     private final PostRepository postRepository;
     private final MemberRepository memberRepository;
-    private final PostCategoryRepository postCategoryRepository;
     private final PostImageRepository postImageRepository;
     private final PostImageService postImageService;
     private final NotificationService notificationService;
@@ -60,14 +59,8 @@ public class PostService {
         Member member = context.member();
         Fridge fridge = context.fridge();
 
-        PostCategory postCategory = postCategoryRepository.findById(createDto.getCategoryId())
-                .orElseThrow(() -> new EntityNotFoundException("없는 카테고리입니다."));
-
-        if ("공지사항".equals(postCategory.getCategory())) {
-            if (context.type() != Type.MANAGER) {
-                throw new AccessDeniedException("공지사항은 해당 냉장고의 매니저만 작성할 수 있습니다.");
-            }
-        }
+        PostCategory postCategory = createDto.getCategory();
+        validateCategory(postCategory, context.type());
 
         Post post = Post.builder()
                 .title(createDto.getTitle())
@@ -86,7 +79,7 @@ public class PostService {
             });
         }
 
-        if (postCategory.getCategory().equals("공지사항")) {
+        if (postCategory == PostCategory.공지사항) {
             List<FridgeMember> fridgeMemberList = fridgeMemberRepository
                     .findAllByFridgeAndType(fridge, Type.COMMON);
 
@@ -99,7 +92,9 @@ public class PostService {
     }
 
     public Long updatePost(Long fridgeId, Long postId, PostUpdateDto updateDto) {
-        fridgeAccessValidator.validate(fridgeId);
+        FridgeContext context = fridgeAccessValidator.validate(fridgeId);
+        // 수정으로 공지사항을 만드는 것도 작성과 같이 관리자만 가능
+        validateCategory(updateDto.getCategory(), context.type());
 
         Post post = postRepository.findById(postId).orElseThrow(() -> new EntityNotFoundException("없는 게시글입니다"));
 
@@ -130,8 +125,7 @@ public class PostService {
                 .map(url -> PostImage.builder().imageUrl(url).post(post).build())
                 .forEach(postImage -> post.getImages().add(postImage));
 
-        PostCategory postCategory = postCategoryRepository.findById(updateDto.getCategoryId()).orElseThrow(() -> new EntityNotFoundException("없는 카테고리입니다."));
-        post.updatePost(updateDto, postCategory);
+        post.updatePost(updateDto);
 
         return post.getId();
     }
@@ -188,7 +182,7 @@ public class PostService {
         Specification<Post> searchSpec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (categoryName != null && !categoryName.equals("전체")) {
-                predicates.add(cb.equal(root.get("category").get("category"), categoryName));
+                predicates.add(cb.equal(root.get("category"), toCategory(categoryName)));
             }
             if (postSearchDto.getKeyword() != null && !postSearchDto.getKeyword().isBlank()) {
                 String keywordPattern = "%" + postSearchDto.getKeyword() + "%";
@@ -203,7 +197,8 @@ public class PostService {
         Pageable sortedPageable = PageRequest.of(
                 pageable.getPageNumber(),
                 pageable.getPageSize(),
-                Sort.by(Sort.Direction.DESC, "createdTime") // 정렬 기준 필드 지정
+                // 고정 글을 맨 위에 (최근에 고정한 글이 먼저), 그 아래는 최신 글 순
+                Sort.by(Sort.Order.desc("pinned"), Sort.Order.desc("pinnedAt"), Sort.Order.desc("createdTime"))
         );
         Page<Post> postList = postRepository.findAll(finalSpec, sortedPageable);
         return postList.map(post -> {
@@ -238,12 +233,50 @@ public class PostService {
         rabbitMqService.publishUnLikeUpdate(post.getId(),member.getId());
     }
 
-    public List<PostCategoryResDto> findAllCategories() {
+    public List<String> findAllCategories() {
+        return Arrays.stream(PostCategory.values())
+                .map(PostCategory::name)
+                .toList();
+    }
 
-        List<PostCategory> categories = postCategoryRepository.findAll();
-        return categories.stream()
-                .map(PostCategoryResDto::fromEntity)
-                .collect(Collectors.toList());
+    // 상단 고정 / 해제 전환. 공지사항만 고정 가능, 냉장고 관리자만
+    public boolean togglePin(Long fridgeId, Long postId) {
+        FridgeContext context = fridgeAccessValidator.validate(fridgeId);
+        if (context.type() != Type.MANAGER) {
+            throw new AccessDeniedException("게시글 고정은 냉장고 관리자만 할 수 있습니다.");
+        }
+
+        Post post = postRepository.findById(postId)
+                .orElseThrow(() -> new EntityNotFoundException("없는 게시글입니다."));
+        if (!post.getFridge().getId().equals(fridgeId)) {
+            throw new AccessDeniedException("해당 냉장고에 속한 게시글이 아닙니다.");
+        }
+
+        if (!post.isPinned() && post.getCategory() != PostCategory.공지사항) {
+            throw new IllegalArgumentException("공지사항만 상단에 고정할 수 있습니다.");
+        }
+
+        post.togglePin();
+        return post.isPinned();
+    }
+
+    // 카테고리 필수, 공지사항은 냉장고 관리자만
+    private void validateCategory(PostCategory category, Type memberType) {
+        if (category == null) {
+            throw new IllegalArgumentException("카테고리를 선택해주세요.");
+        }
+        if (category == PostCategory.공지사항 && memberType != Type.MANAGER) {
+            throw new AccessDeniedException("공지사항은 해당 냉장고의 매니저만 작성할 수 있습니다.");
+        }
+    }
+
+    // 목록 필터의 카테고리 이름을 enum으로 변환
+    private PostCategory toCategory(String categoryName) {
+        try {
+            return PostCategory.valueOf(categoryName);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("없는 카테고리입니다: " + categoryName);
+        }
     }
 
 }
