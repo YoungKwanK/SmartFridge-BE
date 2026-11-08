@@ -21,6 +21,7 @@ public class PostDetailDto {
     private String content;
     private String writer;
     private String categoryName;
+    private boolean pinned;
     private LocalDateTime createdDate;
     private List<String> imageUrls;
     private int commentCount;
@@ -33,7 +34,8 @@ public class PostDetailDto {
                 .id(post.getId())
                 .title(post.getTitle())
                 .content(post.getContent())
-                .categoryName(post.getCategory().getCategory())
+                .categoryName(post.getCategory().name())
+                .pinned(post.isPinned())
                 .writer(post.getMember().getName())
                 .createdDate(post.getCreatedTime())
                 .imageUrls(post.getImages().stream()

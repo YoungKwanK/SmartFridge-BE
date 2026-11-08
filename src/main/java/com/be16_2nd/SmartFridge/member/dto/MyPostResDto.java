@@ -30,7 +30,7 @@ public class MyPostResDto {
                 .id(post.getId())
                 .title(post.getTitle())
                 .writer(post.getMember().getName())
-                .categoryName(post.getCategory().getCategory())
+                .categoryName(post.getCategory().name())
                 .viewCount(viewCount)
                 .timeAgo(calculateTimeAgo(post.getCreatedTime()))
                 .build();

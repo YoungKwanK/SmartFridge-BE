@@ -18,6 +18,7 @@ public class PostResDto {
     private String title;
     private String writer;
     private String categoryName;
+    private boolean pinned;
     private Long viewCount;
     private String timeAgo;
 
@@ -26,7 +27,8 @@ public class PostResDto {
                 .id(post.getId())
                 .title(post.getTitle())
                 .writer(post.getMember().getName())
-                .categoryName(post.getCategory().getCategory())
+                .categoryName(post.getCategory().name())
+                .pinned(post.isPinned())
                 .viewCount(viewCount)
                 .timeAgo(calculateTimeAgo(post.getCreatedTime()))
                 .build();
