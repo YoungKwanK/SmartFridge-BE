@@ -8,7 +8,6 @@ import lombok.*;
 @NoArgsConstructor
 @Getter
 @Builder
-@ToString
 public class InquiryImage {
 
     @Id
