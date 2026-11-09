@@ -9,8 +9,6 @@ import lombok.*;
 @Entity
 @Getter
 @Builder
-@Data
-@EqualsAndHashCode(callSuper = false)
 @AllArgsConstructor
 @NoArgsConstructor
 public class Notification extends BaseTimeEntity {
