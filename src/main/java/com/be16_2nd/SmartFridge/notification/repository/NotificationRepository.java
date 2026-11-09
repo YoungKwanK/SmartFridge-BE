@@ -48,4 +48,13 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     @Query("update Notification n set n.isRead = true " +
             "where n.id in :ids and n.receiver = :receiver and n.isRead = false")
     int markAsRead(@Param("ids") List<Long> ids, @Param("receiver") Member receiver);
+
+    // 특정 대상의 알림을 한 번에 읽음 처리 (같은 트랜잭션에서 읽어 둔 엔티티를 쓸 수 있도록 영속성 컨텍스트를 비우지 않음)
+    @Modifying
+    @Query("update Notification n set n.isRead = true " +
+            "where n.receiver = :receiver and n.notificationType = :type " +
+            "and n.targetId = :targetId and n.isRead = false")
+    int markAsReadByTarget(@Param("receiver") Member receiver,
+                           @Param("type") NotificationType type,
+                           @Param("targetId") Long targetId);
 }

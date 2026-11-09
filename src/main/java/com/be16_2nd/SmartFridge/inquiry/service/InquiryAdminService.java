@@ -13,6 +13,7 @@ import com.be16_2nd.SmartFridge.inquiryComment.repository.InquiryCommentReposito
 import com.be16_2nd.SmartFridge.member.domain.Member;
 import com.be16_2nd.SmartFridge.member.service.AdminAccountProvider;
 import com.be16_2nd.SmartFridge.notification.domain.NotificationType;
+import com.be16_2nd.SmartFridge.notification.repository.NotificationRepository;
 import com.be16_2nd.SmartFridge.notification.service.NotificationService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,7 @@ public class InquiryAdminService {
     private final InquiryCommentRepository inquiryCommentRepository;
     private final NotificationService notificationService;
     private final AdminAccountProvider adminAccountProvider;
+    private final NotificationRepository notificationRepository;
 
     @Transactional(readOnly = true)
     public List<InquiryResDto> findAllInquiry() {
@@ -56,6 +58,8 @@ public class InquiryAdminService {
         inquiry.completeWithReply(inquiryComment);
         // 알림 발송 + db 저장
         notificationService.create(sender, receiver, NotificationType.ADMIN_REPLY, inquiryComment);
+        // 답변으로 처리가 끝났으므로 관리자의 새 문의 알림은 읽음 처리
+        notificationRepository.markAsReadByTarget(sender, NotificationType.NEW_INQUIRY, inquiryId);
         return InquiryCommentResDto.builder()
                 .id(inquiryComment.getCommentId())
                 .contents(inquiryComment.getCommentContents())
@@ -71,6 +75,10 @@ public class InquiryAdminService {
     public InquiryResDto updateInquiry(Long inquiryId, InquiryStatus status) {
         Inquiry inquiry = getInquiry(inquiryId);
         inquiry.changeStatus(status);
+        // 답변완료·반려로 문의가 끝나면 관리자의 새 문의 알림은 읽음 처리
+        if (status == InquiryStatus.COMPLETED || status == InquiryStatus.CANCELLED) {
+            notificationRepository.markAsReadByTarget(adminAccountProvider.getAdmin(), NotificationType.NEW_INQUIRY, inquiryId);
+        }
         return InquiryResDto.fromEntity(inquiry);
     }
 

@@ -131,6 +131,7 @@ public class NotificationService {
                 content = sender.getName() + "님이 새로운 문의를 등록했습니다.";
                 targetType = TargetType.INQUIRY;
                 targetId = inquiry.getInquiryId();
+                fridge = inquiry.getFridge();
                 break;
 
             case ADMIN_REPLY, ADMIN_REPLY_UPDATED:
