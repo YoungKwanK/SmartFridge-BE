@@ -59,6 +59,17 @@ public class Inquiry extends BaseTimeEntity {
         this.status = nextStatus;
     }
 
+    public boolean isOwner(Member member) {
+        return this.member != null && this.member.getId().equals(member.getId());
+    }
+
+    // 답변이 끝났거나 취소된 문의는 작성자도 수정할 수 없다.
+    public void validateEditable() {
+        if (this.status == InquiryStatus.COMPLETED || this.status == InquiryStatus.CANCELLED) {
+            throw new InquiryConflictException("답변이 완료되었거나 취소된 문의는 수정할 수 없습니다.");
+        }
+    }
+
     // 문의 1건에는 답변 1개만 달 수 있고, 답변이 달리면 완료 상태가 된다.
     public void validateReplyable() {
         if (this.comments != null) {
