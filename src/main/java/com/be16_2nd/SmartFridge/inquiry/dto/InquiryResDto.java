@@ -25,6 +25,9 @@ public class InquiryResDto {
     private String title;
     private String contents;
     private String memberEmail;
+    private String memberName;
+    private Long fridgeId;
+    private String fridgeName;
     private List<String> imageUrls;
     private InquiryStatus status; // 상태 추가
     private InquiryCommentResDto comments;
@@ -40,6 +43,9 @@ public class InquiryResDto {
                 .title(inquiry.getTitle())
                 .contents(inquiry.getContents())
                 .memberEmail(inquiry.getMember().getEmail())
+                .memberName(inquiry.getMember().getName())
+                .fridgeId(inquiry.getFridge() != null ? inquiry.getFridge().getId() : null)
+                .fridgeName(inquiry.getFridge() != null ? inquiry.getFridge().getFridgeName() : null)
                 .imageUrls(inquiry.getInquiryImages().stream()
                         .map(InquiryImage::getImageUrl)
                         .collect(Collectors.toList()))
