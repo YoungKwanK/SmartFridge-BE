@@ -23,7 +23,7 @@ public class FoodExpScheduler  {
     private final FoodRepository foodRepository;
     private final NotificationService notificationService;
 
-    // 매일 오전 9시에 실행
+    // 매일 오전 10시에 실행
     @Transactional
     @Scheduled(cron = "0 0 10 * * *")
     public void notificationForExpFood() {
@@ -31,12 +31,10 @@ public class FoodExpScheduler  {
         LocalDate today = LocalDate.now();
         // 유통기한 하루 전 (현재 + 1일)
         LocalDate oneDayAfter = today.plusDays(1);
-        // 유통기한 삼일 전 (현재 + 3일)
-        LocalDate threeDaysAfter = today.plusDays(3);
 
-        // 유통기한이 현재 날짜를 기준으로 당일, 하루, 삼일 후인 음식 조회
+        // 유통기한이 현재 날짜를 기준으로 당일, 하루 후인 음식 조회
         List<Food> expFoodList = foodRepository.findAllByExpirationDateIn(
-                List.of(today, oneDayAfter, threeDaysAfter)
+                List.of(today, oneDayAfter)
         );
 
         for (Food food : expFoodList) {
@@ -58,9 +56,6 @@ public class FoodExpScheduler  {
         }
         if (expiryDate.isEqual(today.plusDays(1))) {
             return "1일 남았습니다.";
-        }
-        if (expiryDate.isEqual(today.plusDays(3))) {
-            return "3일 남았습니다.";
         }
         return "";
     }

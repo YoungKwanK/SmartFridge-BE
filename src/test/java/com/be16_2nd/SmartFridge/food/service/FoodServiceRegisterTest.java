@@ -8,12 +8,8 @@ import com.be16_2nd.SmartFridge.food.dto.FoodCreateDto;
 import com.be16_2nd.SmartFridge.food.dto.FoodResDto;
 import com.be16_2nd.SmartFridge.food.repository.FoodRepository;
 import com.be16_2nd.SmartFridge.fridge.domain.Fridge;
-import com.be16_2nd.SmartFridge.fridge.domain.FridgeMember;
 import com.be16_2nd.SmartFridge.fridge.domain.Type;
-import com.be16_2nd.SmartFridge.fridge.repository.FridgeMemberRepository;
 import com.be16_2nd.SmartFridge.member.domain.Member;
-import com.be16_2nd.SmartFridge.notification.domain.NotificationType;
-import com.be16_2nd.SmartFridge.notification.service.NotificationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,14 +20,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -47,22 +40,17 @@ class FoodServiceRegisterTest {
 
     @Mock FoodRepository foodRepository;
     @Mock FridgeAccessValidator fridgeAccessValidator;
-    @Mock NotificationService notificationService;
-    @Mock FridgeMemberRepository fridgeMemberRepository;
 
     @InjectMocks FoodService foodService;
 
     final Long fridgeId = 1L;
     final Fridge fridge = Fridge.builder().id(fridgeId).fridgeName("우리집 냉장고").build();
     final Member member = Member.builder().name("홍길동").email("user@test.com").build();
-    final Member manager = Member.builder().name("관리자").email("manager@test.com").build();
 
     @BeforeEach
     void setUp() {
         lenient().when(fridgeAccessValidator.validate(fridgeId))
                 .thenReturn(new FridgeAccessValidator.FridgeContext(fridge, member, Type.COMMON));
-        lenient().when(fridgeMemberRepository.findByFridgeAndType(fridge, Type.MANAGER))
-                .thenReturn(Optional.of(FridgeMember.builder().fridge(fridge).member(manager).type(Type.MANAGER).build()));
         // saveAll은 받은 목록을 그대로 돌려준다고 가정
         lenient().when(foodRepository.saveAll(anyList()))
                 .thenAnswer(invocation -> new ArrayList<Food>(invocation.getArgument(0)));
@@ -84,14 +72,6 @@ class FoodServiceRegisterTest {
         List<FoodResDto> result = foodService.registerFood(fridgeId, List.of(food("우유")));
 
         assertThat(result).hasSize(1);
-    }
-
-    @Test
-    void 저장한_식품마다_관리자에게_등록_알림을_보낸다() {
-        foodService.registerFood(fridgeId, List.of(food("우유"), food("계란")));
-
-        verify(notificationService, times(2))
-                .create(eq(member), eq(manager), eq(NotificationType.NEW_FOOD), any(Food.class));
     }
 
     @Test
@@ -136,7 +116,6 @@ class FoodServiceRegisterTest {
                 .hasMessage("유통기한 날짜는 필수입니다.");
 
         verify(foodRepository, never()).saveAll(anyList());
-        verify(notificationService, never()).create(any(), any(), any(), any());
     }
 
     private FoodCreateDto food(String name) {

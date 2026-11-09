@@ -101,14 +101,6 @@ public class NotificationService {
                 targetId = fridge.getId();
                 break;
 
-            case NEW_FOOD:
-                Food food = (Food) entity;
-                content = sender.getName() + "님이 새로운 식품 '" + food.getName() + "'을(를) 등록했습니다.";
-                targetType = TargetType.FOOD;
-                targetId = food.getId();
-                fridge = food.getFridge();
-                break;
-
             case NEW_ANNOUNCEMENT:
                 Post post = (Post) entity;
                 content = post.getFridge().getFridgeName() + "에 " +
