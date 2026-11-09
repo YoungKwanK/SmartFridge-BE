@@ -1,6 +1,8 @@
 package com.be16_2nd.SmartFridge.inquiry.service;
 
+import com.be16_2nd.SmartFridge.common.service.FridgeAccessValidator;
 import com.be16_2nd.SmartFridge.common.service.S3Uploader;
+import com.be16_2nd.SmartFridge.fridge.domain.Fridge;
 import com.be16_2nd.SmartFridge.inquiry.domain.InquiryImage;
 import com.be16_2nd.SmartFridge.inquiry.dto.InquiryCreateDto;
 import com.be16_2nd.SmartFridge.inquiry.domain.Inquiry;
@@ -9,7 +11,7 @@ import com.be16_2nd.SmartFridge.inquiry.dto.InquiryUpdateDto;
 import com.be16_2nd.SmartFridge.inquiry.repository.InquiryRepository;
 import com.be16_2nd.SmartFridge.member.domain.Member;
 import com.be16_2nd.SmartFridge.member.repository.MemberRepository;
-import com.be16_2nd.SmartFridge.member.service.MemberService;
+import com.be16_2nd.SmartFridge.member.service.AdminAccountProvider;
 import com.be16_2nd.SmartFridge.notification.domain.NotificationType;
 import com.be16_2nd.SmartFridge.notification.service.NotificationService;
 import jakarta.persistence.EntityNotFoundException;
@@ -36,19 +38,25 @@ public class InquiryService {
     private final MemberRepository memberRepository;
     private final NotificationService notificationService;
     private final S3Uploader s3Uploader;
+    private final AdminAccountProvider adminAccountProvider;
+    private final FridgeAccessValidator fridgeAccessValidator;
 
     public Long create(InquiryCreateDto inquiryCreateDto) {
 
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         Member sender = memberRepository.findByEmail(email)
                 .orElseThrow(()-> new EntityNotFoundException("등록되지 않은 사용자입니다."));
-        Member receiver = memberRepository.findByEmail("admin@naver.com")
-                .orElseThrow(() -> new EntityNotFoundException("등록되지 않은 관리자입니다."));
+        Member receiver = adminAccountProvider.getAdmin();
 
         // 업로드 전에 전부 검증 (일부만 올라가는 것을 막는다)
         List<MultipartFile> images = InquiryImageValidator.validate(inquiryCreateDto.getImageFiles(), 0);
 
-        Inquiry inquiry = inquiryCreateDto.toEntity(sender);
+        // 본인이 속한 냉장고만 문의에 연결할 수 있다
+        Fridge fridge = inquiryCreateDto.getFridgeId() != null
+                ? fridgeAccessValidator.validate(inquiryCreateDto.getFridgeId()).fridge()
+                : null;
+
+        Inquiry inquiry = inquiryCreateDto.toEntity(sender, fridge);
         addImages(inquiry, images);
         inquiryRepository.save(inquiry);
         // 알림 발송 + db 저장
@@ -77,12 +85,7 @@ public class InquiryService {
         int keptImageCount = inquiry.getInquiryImages().size() - removedImages.size();
         List<MultipartFile> newImages = InquiryImageValidator.validate(inquiryUpdateDto.getImageFiles(), keptImageCount);
 
-        if (inquiryUpdateDto.getTitle() != null)
-            inquiry.setTitle(inquiryUpdateDto.getTitle());
-        if (inquiryUpdateDto.getContents() != null)
-            inquiry.setContents(inquiryUpdateDto.getContents());
-        if (inquiryUpdateDto.getInquiryType() != null)
-            inquiry.setInquiryType(inquiryUpdateDto.getInquiryType());
+        inquiry.updateContents(inquiryUpdateDto.getInquiryType(), inquiryUpdateDto.getTitle(), inquiryUpdateDto.getContents());
 
         // 업로드가 실패해도 기존 이미지가 지워지지 않도록 새 이미지부터 올린다
         addImages(inquiry, newImages);
