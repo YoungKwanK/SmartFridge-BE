@@ -9,7 +9,6 @@ import java.util.List;
 @RequiredArgsConstructor
 public enum NotificationType {
 
-    NEW_FOOD("새로운 식품이 등록되었습니다.", NotificationSettingType.SYSTEM),
     NEW_MEMBER("새로운 멤버가 참여했습니다.", NotificationSettingType.SYSTEM),
     EXPIRATION_IMMINENT("유통기한 임박 알림", NotificationSettingType.SYSTEM),
     NEW_ANNOUNCEMENT("새로운 공지사항이 등록되었습니다.", NotificationSettingType.ANNOUNCE),
@@ -28,7 +27,6 @@ public enum NotificationType {
     // 알림 목록에 표시할 타입
     public static List<NotificationType> visibleInNotificationList() {
         return List.of(
-                NEW_FOOD,
                 NEW_MEMBER,
                 EXPIRATION_IMMINENT,
                 NEW_ANNOUNCEMENT,
