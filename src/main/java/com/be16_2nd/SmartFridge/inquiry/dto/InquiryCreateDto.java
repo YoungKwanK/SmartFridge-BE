@@ -32,14 +32,17 @@ public class InquiryCreateDto {
 
     private List<MultipartFile> imageFiles = new ArrayList<>();
 
+    // 문의를 등록하는 화면의 현재 냉장고 (선택 값)
+    private Long fridgeId;
 
-    public Inquiry toEntity(Member member) {
+    public Inquiry toEntity(Member member, Fridge fridge) {
         return Inquiry.builder()
                 .inquiryType(inquiryType)
                 .title(title)
                 .contents(contents)
                 .inquiryImages(new ArrayList<>())
                 .member(member)
+                .fridge(fridge)
                 .build();
     }
 }

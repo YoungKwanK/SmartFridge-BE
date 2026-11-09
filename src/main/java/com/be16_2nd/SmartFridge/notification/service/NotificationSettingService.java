@@ -52,7 +52,7 @@ public class NotificationSettingService {
 
                 if (notificationSetting != null) {
                     // 기존 설정이 있으면 isActive 만 변경
-                    notificationSetting.setActive(isActive);
+                    notificationSetting.changeActive(isActive);
                 } else {
                     // 기존 설정 없으면 알림 수신 설정 객체 생성 후 저장
                     notificationSetting = NotificationSetting.builder()

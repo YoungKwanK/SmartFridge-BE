@@ -2,6 +2,7 @@ package com.be16_2nd.SmartFridge.member.controller;
 
 import com.be16_2nd.SmartFridge.common.dto.CommonDto;
 import com.be16_2nd.SmartFridge.inquiry.domain.InquiryStatus;
+import com.be16_2nd.SmartFridge.inquiry.service.InquiryAdminService;
 import com.be16_2nd.SmartFridge.inquiryComment.dto.InquiryCommentCreateDto;
 import com.be16_2nd.SmartFridge.inquiryComment.dto.InquiryCommentResDto;
 import com.be16_2nd.SmartFridge.inquiryComment.dto.InquiryCommentUpdateDto;
@@ -25,6 +26,7 @@ import java.util.List;
 public class AdminController {
 
     private final AdminService adminService;
+    private final InquiryAdminService inquiryAdminService;
     private final NotificationService notificationService;
 
     @GetMapping("/member/list")
@@ -71,7 +73,7 @@ public class AdminController {
     public ResponseEntity<?> findAllInquiry(){
         return new ResponseEntity<>(
                 CommonDto.builder()
-                        .result(adminService.findAllInquiry())
+                        .result(inquiryAdminService.findAllInquiry())
                         .status_code(HttpStatus.OK.value())
                         .status_message("문의내역 전체조회 완료")
                         .build(),HttpStatus.OK);
@@ -81,7 +83,7 @@ public class AdminController {
     public ResponseEntity<?> replyInquiry(@PathVariable Long inquiryId
             , @RequestBody InquiryCommentCreateDto inquiryCommentCreateDto){
         return new ResponseEntity<>(CommonDto.builder()
-                .result(adminService.replyInquiry(inquiryCommentCreateDto, inquiryId))
+                .result(inquiryAdminService.replyInquiry(inquiryCommentCreateDto, inquiryId))
                 .status_code(HttpStatus.CREATED.value())
                 .status_message("답변 등록 완료").build(), HttpStatus.CREATED);
     }
@@ -90,7 +92,7 @@ public class AdminController {
     public ResponseEntity<?> inquiryDetail(@PathVariable Long inquiryId){
         return new ResponseEntity<>(
                 CommonDto.builder()
-                        .result(adminService.inquiryDetail(inquiryId))
+                        .result(inquiryAdminService.inquiryDetail(inquiryId))
                         .status_code(HttpStatus.OK.value())
                         .status_message("문의 상세조회 성공")
                         .build(),HttpStatus.OK);
@@ -100,7 +102,7 @@ public class AdminController {
     public ResponseEntity<?> updateInquiry (@PathVariable Long inquiryId, @RequestBody InquiryStatus status){
         return new ResponseEntity<>(
                 CommonDto.builder()
-                        .result(adminService.updateInquiry(inquiryId, status))
+                        .result(inquiryAdminService.updateInquiry(inquiryId, status))
                         .status_code(HttpStatus.OK.value())
                         .status_message("상태변경 완료")
                         .build(),HttpStatus.OK);
@@ -111,7 +113,7 @@ public class AdminController {
                                          @RequestBody InquiryCommentUpdateDto dto){
         return new ResponseEntity<>(
                 CommonDto.builder()
-                        .result(adminService.updateReply(inquiryId, dto))
+                        .result(inquiryAdminService.updateReply(inquiryId, dto))
                         .status_code(HttpStatus.OK.value())
                         .status_message("문의 답변이 수정되었습니다.")
                         .build(),HttpStatus.OK);

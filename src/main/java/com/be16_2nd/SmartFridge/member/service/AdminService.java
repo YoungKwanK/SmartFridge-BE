@@ -2,33 +2,28 @@ package com.be16_2nd.SmartFridge.member.service;
 
 import com.be16_2nd.SmartFridge.food.repository.FoodRepository;
 import com.be16_2nd.SmartFridge.fridge.domain.Type;
-import com.be16_2nd.SmartFridge.inquiry.domain.Inquiry;
 import com.be16_2nd.SmartFridge.inquiry.domain.InquiryStatus;
-import com.be16_2nd.SmartFridge.inquiry.dto.InquiryResDto;
-import com.be16_2nd.SmartFridge.inquiry.exception.InquiryConflictException;
+import com.be16_2nd.SmartFridge.inquiry.domain.InquiryType;
 import com.be16_2nd.SmartFridge.inquiry.repository.InquiryRepository;
-import com.be16_2nd.SmartFridge.inquiryComment.domain.InquiryComment;
-import com.be16_2nd.SmartFridge.inquiryComment.dto.InquiryCommentCreateDto;
-import com.be16_2nd.SmartFridge.inquiryComment.dto.InquiryCommentResDto;
-import com.be16_2nd.SmartFridge.inquiryComment.dto.InquiryCommentUpdateDto;
-import com.be16_2nd.SmartFridge.inquiryComment.repository.InquiryCommentRepository;
 import com.be16_2nd.SmartFridge.member.domain.Member;
 import com.be16_2nd.SmartFridge.member.dto.MemberResDto;
 import com.be16_2nd.SmartFridge.member.dto.AdminDashbordResDto;
 import com.be16_2nd.SmartFridge.member.repository.MemberRepository;
+import com.be16_2nd.SmartFridge.notification.domain.Notification;
 import com.be16_2nd.SmartFridge.notification.domain.NotificationType;
 import com.be16_2nd.SmartFridge.notification.dto.NotificationResDto;
 import com.be16_2nd.SmartFridge.notification.repository.NotificationRepository;
-import com.be16_2nd.SmartFridge.notification.service.NotificationService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -40,9 +35,8 @@ public class AdminService {
     private final MemberRepository memberRepository;
     private final InquiryRepository inquiryRepository;
     private final NotificationRepository notificationRepository;
-    private final InquiryCommentRepository inquiryCommentRepository;
-    private final NotificationService notificationService;
     private final FoodRepository foodRepository;
+    private final AdminAccountProvider adminAccountProvider;
 
 
     @Transactional(readOnly = true)
@@ -61,8 +55,7 @@ public class AdminService {
     }
 
     public AdminDashbordResDto dashbord(){
-        Member member = memberRepository.findByEmail("admin@naver.com")
-                .orElseThrow(()->new EntityNotFoundException("ONLY ADMIN ALLOWED"));
+        Member member = adminAccountProvider.getAdmin();
 
         return AdminDashbordResDto.builder()
                 .inquiryCount(inquiryRepository.count())
@@ -70,63 +63,6 @@ public class AdminService {
                 .userCount(memberRepository.count())
                 .newNotification(notificationRepository.countByReceiverAndIsReadFalse(member))
                 .build();
-    }
-
-    @Transactional(readOnly = true)
-    public List<InquiryResDto> findAllInquiry(){
-        return inquiryRepository.findAll().stream()
-                .map(i-> InquiryResDto.fromEntity(i)).collect(Collectors.toList());
-    }
-
-    public InquiryCommentResDto replyInquiry(InquiryCommentCreateDto inquiryCommentCreateDto, Long inquiryId) {
-        Inquiry inquiry = inquiryRepository.findByIdForUpdate(inquiryId)
-                .orElseThrow(() -> new EntityNotFoundException("등록되지 않은 문의입니다."));
-        inquiry.validateReplyable();
-        Member sender = memberRepository.findByEmail("admin@naver.com")
-                .orElseThrow(() -> new EntityNotFoundException("등록되지 않은 관리자입니다."));
-        String email = inquiry.getMember().getEmail();
-        Member receiver = memberRepository.findByEmail(email)
-                .orElseThrow(() -> new EntityNotFoundException("등록되지 않은 회원입니다."));
-        InquiryComment inquiryComment;
-        try {
-            inquiryComment = inquiryCommentRepository.saveAndFlush(inquiryCommentCreateDto.toEntity(inquiryCommentCreateDto, inquiry));
-        } catch (DataIntegrityViolationException e) {
-            throw new InquiryConflictException("이미 답변이 등록된 문의입니다.");
-        }
-        inquiry.completeWithReply(inquiryComment);
-        // 알림 발송 + db 저장
-        notificationService.create(sender, receiver, NotificationType.ADMIN_REPLY, inquiryComment);
-        return InquiryCommentResDto.builder()
-                .id(inquiryComment.getCommentId())
-                .contents(inquiryComment.getCommentContents())
-                .inquiryId(inquiryId)
-                .build();
-    }
-
-    public InquiryResDto inquiryDetail(Long inquiryId){
-        Inquiry inquiry = inquiryRepository.findAllByInquiryId(inquiryId)
-                .orElseThrow(()-> new EntityNotFoundException("존재하지 않는 문의글입니다."));
-        return InquiryResDto.fromEntity(inquiry);
-    }
-
-    public InquiryResDto updateInquiry(Long inquiryId, InquiryStatus status){
-        Inquiry inquiry = inquiryRepository.findAllByInquiryId(inquiryId)
-                .orElseThrow(()->new EntityNotFoundException("존재하지 않는 문의글입니다."));
-        inquiry.changeStatus(status);
-        return InquiryResDto.fromEntity(inquiry);
-    }
-
-    public InquiryResDto updateReply(Long inquiryId, InquiryCommentUpdateDto dto){
-        Inquiry inquiry = inquiryRepository.findAllByInquiryId(inquiryId)
-                .orElseThrow(()->new EntityNotFoundException("존재하지 않는 문의입니다."));
-        Long inquiryCommentId = inquiry.getComments().getCommentId();
-        InquiryComment inquiryComment = inquiryCommentRepository.findById(inquiryCommentId)
-                .orElseThrow(()->new EntityNotFoundException("답변이 없습니다."));
-        inquiryComment.updateCommentContents(dto.getNewCommentContents());
-        inquiryCommentRepository.save(inquiryComment);
-        inquiryRepository.save(inquiry);
-
-        return InquiryResDto.fromEntity(inquiry);
     }
 
     public MemberResDto memberDetail(String memberEmail){
@@ -139,24 +75,39 @@ public class AdminService {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         Member member = memberRepository.findByEmail(email)
                 .orElseThrow(()->new EntityNotFoundException("ONLY ADMIN ALLOWED"));
-        return notificationRepository.findByReceiverOrderByIsReadAscCreatedTimeDesc(member)
-                .stream().map(notification -> NotificationResDto.fromEntity(notification, Type.ADMIN))
-                .collect(Collectors.toList());
+        return toAdminNotificationDtos(notificationRepository.findByReceiverOrderByIsReadAscCreatedTimeDesc(member));
     }
     public List<NotificationResDto> findAllReadNotification(){
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         Member member = memberRepository.findByEmail(email)
                 .orElseThrow(()->new EntityNotFoundException("ONLY ADMIN ALLOWED"));
-        return notificationRepository.findByReceiverAndIsReadTrueOrderByCreatedTimeDesc(member)
-                .stream().map(notification -> NotificationResDto.fromEntity(notification, Type.ADMIN))
-                .collect(Collectors.toList());
+        return toAdminNotificationDtos(notificationRepository.findByReceiverAndIsReadTrueOrderByCreatedTimeDesc(member));
     }
     public List<NotificationResDto> findAllUnreadNotification(){
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         Member member = memberRepository.findByEmail(email)
                 .orElseThrow(()->new EntityNotFoundException("ONLY ADMIN ALLOWED"));
-        return notificationRepository.findByReceiverAndIsReadFalseOrderByCreatedTimeDesc(member)
-                .stream().map(notification -> NotificationResDto.fromEntity(notification, Type.ADMIN))
+        return toAdminNotificationDtos(notificationRepository.findByReceiverAndIsReadFalseOrderByCreatedTimeDesc(member));
+    }
+
+    // 새 문의 알림에는 사용자가 선택한 문의 유형을 함께 내려준다 (알림 수와 상관없이 문의 조회 1번)
+    private List<NotificationResDto> toAdminNotificationDtos(List<Notification> notifications) {
+        List<Long> inquiryIds = notifications.stream()
+                .filter(notification -> notification.getNotificationType() == NotificationType.NEW_INQUIRY)
+                .map(Notification::getTargetId)
+                .filter(Objects::nonNull)
+                .toList();
+
+        Map<Long, InquiryType> inquiryTypes = new HashMap<>();
+        if (!inquiryIds.isEmpty()) {
+            inquiryRepository.findAllById(inquiryIds)
+                    .forEach(inquiry -> inquiryTypes.put(inquiry.getInquiryId(), inquiry.getInquiryType()));
+        }
+
+        return notifications.stream()
+                .map(notification -> NotificationResDto.fromEntity(notification, Type.ADMIN,
+                        notification.getNotificationType() == NotificationType.NEW_INQUIRY
+                                ? inquiryTypes.get(notification.getTargetId()) : null))
                 .collect(Collectors.toList());
     }
 }

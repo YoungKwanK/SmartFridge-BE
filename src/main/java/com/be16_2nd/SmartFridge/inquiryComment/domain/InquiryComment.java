@@ -10,7 +10,6 @@ import lombok.*;
 @NoArgsConstructor
 @Getter
 @Builder
-@ToString
 @Table(uniqueConstraints = @UniqueConstraint(name = "uk_inquiry_comment_inquiry_id", columnNames = "inquiry_id"))
 public class InquiryComment extends BaseTimeEntity {
     @Id

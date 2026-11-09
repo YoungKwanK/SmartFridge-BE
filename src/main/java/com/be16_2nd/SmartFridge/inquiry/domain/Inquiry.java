@@ -1,12 +1,15 @@
 package com.be16_2nd.SmartFridge.inquiry.domain;
 
 import com.be16_2nd.SmartFridge.common.domain.BaseTimeEntity;
+import com.be16_2nd.SmartFridge.fridge.domain.Fridge;
 import com.be16_2nd.SmartFridge.inquiry.exception.InquiryConflictException;
 import com.be16_2nd.SmartFridge.inquiryComment.domain.InquiryComment;
 import com.be16_2nd.SmartFridge.member.domain.Member;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,9 +18,7 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 @Getter
-@Setter
 @Builder
-@ToString
 public class Inquiry extends BaseTimeEntity {
 
     @Id
@@ -35,6 +36,12 @@ public class Inquiry extends BaseTimeEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "member_id")
     private Member member;
+
+    // 문의를 등록한 냉장고. 기존 문의와 냉장고가 삭제된 문의는 null
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "fridge_id")
+    @OnDelete(action = OnDeleteAction.SET_NULL)
+    private Fridge fridge;
 
     @OneToOne(mappedBy = "inquiry", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     private InquiryComment comments;
@@ -60,6 +67,19 @@ public class Inquiry extends BaseTimeEntity {
                     "문의 상태를 " + this.status + "에서 " + nextStatus + "(으)로 변경할 수 없습니다.");
         }
         this.status = nextStatus;
+    }
+
+    // 보내지 않은 값(null)은 기존 값을 유지한다.
+    public void updateContents(InquiryType inquiryType, String title, String contents) {
+        if (inquiryType != null) {
+            this.inquiryType = inquiryType;
+        }
+        if (title != null) {
+            this.title = title;
+        }
+        if (contents != null) {
+            this.contents = contents;
+        }
     }
 
     public boolean isOwner(Member member) {
