@@ -1,6 +1,7 @@
 package com.be16_2nd.SmartFridge.notification.dto;
 
 import com.be16_2nd.SmartFridge.fridge.domain.Type;
+import com.be16_2nd.SmartFridge.inquiry.domain.InquiryType;
 import com.be16_2nd.SmartFridge.notification.domain.Notification;
 import com.be16_2nd.SmartFridge.notification.domain.NotificationType;
 import com.be16_2nd.SmartFridge.notification.domain.TargetType;
@@ -23,6 +24,14 @@ public class NotificationResDto {
     private TargetType targetType;
     private Long targetId;
     private LocalDateTime createdAt;
+    // 새 문의 알림일 때 사용자가 선택한 문의 유형 (관리자 알림 목록에서만 사용)
+    private InquiryType inquiryType;
+
+    public static NotificationResDto fromEntity(Notification notification, Type fridgeMemberType, InquiryType inquiryType) {
+        NotificationResDto dto = fromEntity(notification, fridgeMemberType);
+        dto.setInquiryType(inquiryType);
+        return dto;
+    }
 
     public static NotificationResDto fromEntity(Notification notification, Type fridgeMemberType) {
         return NotificationResDto.builder()
