@@ -4,6 +4,9 @@ import com.be16_2nd.SmartFridge.fridge.domain.Fridge;
 import com.be16_2nd.SmartFridge.inquiry.domain.Inquiry;
 import com.be16_2nd.SmartFridge.inquiry.domain.InquiryType;
 import com.be16_2nd.SmartFridge.member.domain.Member;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -16,9 +19,17 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class InquiryCreateDto {
+    @NotNull(message = "문의 유형을 선택해 주세요")
     private InquiryType inquiryType;
+
+    @NotBlank(message = "제목을 입력해 주세요")
+    @Size(max = 255, message = "제목은 255자 이하로 입력해 주세요")
     private String title;
+
+    @NotBlank(message = "내용을 입력해 주세요")
+    @Size(max = 5000, message = "내용은 5000자 이하로 입력해 주세요")
     private String contents;
+
     private List<MultipartFile> imageFiles = new ArrayList<>();
 
 
