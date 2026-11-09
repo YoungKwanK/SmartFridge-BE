@@ -16,6 +16,7 @@ public enum NotificationType {
     NEW_COMMENT("내 게시글에 새로운 댓글이 달렸습니다.", NotificationSettingType.COMMENT),
     NEW_INQUIRY("새로운 문의가 등록되었습니다.", NotificationSettingType.SYSTEM),
     ADMIN_REPLY("문의하신 글에 관리자 답변이 달렸습니다.", NotificationSettingType.SYSTEM),
+    ADMIN_REPLY_UPDATED("문의하신 글의 답변이 수정되었습니다.", NotificationSettingType.SYSTEM),
     MANAGER_CHAT("관리자 채팅방에 새로운 메시지가 도착했습니다.", NotificationSettingType.CHAT),
     GROUP_CHAT("공동 구매 채팅방에 새로운 메시지가 도착했습니다.", NotificationSettingType.CHAT),
     ROOM_FULL(" 채팅방에 인원이 마감되었습니다.", NotificationSettingType.CHAT),
@@ -34,7 +35,8 @@ public enum NotificationType {
                 NEW_COMMENT,
                 ROOM_FULL,
                 ROOM_CLOSED,
-                ADMIN_REPLY
+                ADMIN_REPLY,
+                ADMIN_REPLY_UPDATED
         );
     }
 }

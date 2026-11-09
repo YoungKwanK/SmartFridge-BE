@@ -133,7 +133,7 @@ public class NotificationService {
                 targetId = inquiry.getInquiryId();
                 break;
 
-            case ADMIN_REPLY:
+            case ADMIN_REPLY, ADMIN_REPLY_UPDATED:
                 InquiryComment inquiryComment = (InquiryComment) entity;
                 content = notificationType.getDescription();
                 targetType = TargetType.INQUIRY;
