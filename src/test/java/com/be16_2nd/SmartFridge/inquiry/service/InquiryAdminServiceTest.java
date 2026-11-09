@@ -11,6 +11,7 @@ import com.be16_2nd.SmartFridge.inquiryComment.repository.InquiryCommentReposito
 import com.be16_2nd.SmartFridge.member.domain.Member;
 import com.be16_2nd.SmartFridge.member.service.AdminAccountProvider;
 import com.be16_2nd.SmartFridge.notification.domain.NotificationType;
+import com.be16_2nd.SmartFridge.notification.repository.NotificationRepository;
 import com.be16_2nd.SmartFridge.notification.service.NotificationService;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.Test;
@@ -41,6 +42,7 @@ class InquiryAdminServiceTest {
     @Mock InquiryCommentRepository inquiryCommentRepository;
     @Mock NotificationService notificationService;
     @Mock AdminAccountProvider adminAccountProvider;
+    @Mock NotificationRepository notificationRepository;
 
     @InjectMocks InquiryAdminService inquiryAdminService;
 
@@ -60,6 +62,40 @@ class InquiryAdminServiceTest {
         assertThat(inquiry.getStatus()).isEqualTo(InquiryStatus.COMPLETED);
         assertThat(inquiry.getComments().getCommentContents()).isEqualTo("답변입니다");
         verify(notificationService).create(eq(admin), eq(writer), eq(NotificationType.ADMIN_REPLY), any());
+        verify(notificationRepository).markAsReadByTarget(admin, NotificationType.NEW_INQUIRY, inquiryId);
+    }
+
+    @Test
+    void 답변완료로_변경하면_새_문의_알림을_읽음_처리한다() {
+        givenInquiryForStatusChange();
+        when(adminAccountProvider.getAdmin()).thenReturn(admin);
+
+        inquiryAdminService.updateInquiry(inquiryId, InquiryStatus.COMPLETED);
+
+        verify(notificationRepository).markAsReadByTarget(admin, NotificationType.NEW_INQUIRY, inquiryId);
+    }
+
+    @Test
+    void 반려로_변경하면_새_문의_알림을_읽음_처리한다() {
+        givenInquiryForStatusChange();
+        when(adminAccountProvider.getAdmin()).thenReturn(admin);
+
+        inquiryAdminService.updateInquiry(inquiryId, InquiryStatus.CANCELLED);
+
+        verify(notificationRepository).markAsReadByTarget(admin, NotificationType.NEW_INQUIRY, inquiryId);
+    }
+
+    @Test
+    void 처리중으로_변경하면_새_문의_알림은_안읽음을_유지한다() {
+        givenInquiryForStatusChange();
+
+        inquiryAdminService.updateInquiry(inquiryId, InquiryStatus.IN_PROGRESS);
+
+        verify(notificationRepository, never()).markAsReadByTarget(any(), any(), any());
+    }
+
+    private void givenInquiryForStatusChange() {
+        when(inquiryRepository.findAllByInquiryId(inquiryId)).thenReturn(Optional.of(inquiry(InquiryStatus.PENDING)));
     }
 
     @Test
