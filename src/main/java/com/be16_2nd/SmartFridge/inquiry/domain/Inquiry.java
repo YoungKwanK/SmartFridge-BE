@@ -29,6 +29,7 @@ public class Inquiry extends BaseTimeEntity {
 
     private String title;
 
+    @Column(columnDefinition = "TEXT")
     private String contents;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -43,7 +44,9 @@ public class Inquiry extends BaseTimeEntity {
     @Builder.Default
     private InquiryStatus status = InquiryStatus.PENDING;
 
+    // 프론트가 삭제할 이미지를 목록 위치로 보내므로 순서를 고정한다
     @OneToMany(mappedBy = "inquiry", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("imageId ASC")
     @Builder.Default
     @JsonIgnore
     private List<InquiryImage> inquiryImages = new ArrayList<>();
@@ -68,6 +71,19 @@ public class Inquiry extends BaseTimeEntity {
         if (this.status == InquiryStatus.COMPLETED || this.status == InquiryStatus.CANCELLED) {
             throw new InquiryConflictException("답변이 완료되었거나 취소된 문의는 수정할 수 없습니다.");
         }
+    }
+
+    // 프론트는 이미지를 하나 지울 때마다 목록을 줄이고 그 시점의 위치를 보내므로, 같은 순서로 하나씩 제거해 찾는다.
+    public List<InquiryImage> findImagesToRemove(List<Integer> indexes) {
+        List<InquiryImage> remaining = new ArrayList<>(this.inquiryImages);
+        List<InquiryImage> removed = new ArrayList<>();
+        for (int index : indexes) {
+            if (index < 0 || index >= remaining.size()) {
+                throw new IllegalArgumentException("삭제할 이미지를 찾을 수 없습니다. 새로고침 후 다시 시도해 주세요.");
+            }
+            removed.add(remaining.remove(index));
+        }
+        return removed;
     }
 
     // 문의 1건에는 답변 1개만 달 수 있고, 답변이 달리면 완료 상태가 된다.
