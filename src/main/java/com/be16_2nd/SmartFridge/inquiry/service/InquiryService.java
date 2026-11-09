@@ -45,16 +45,11 @@ public class InquiryService {
         Member receiver = memberRepository.findByEmail("admin@naver.com")
                 .orElseThrow(() -> new EntityNotFoundException("등록되지 않은 관리자입니다."));
 
-        Inquiry inquiry = inquiryCreateDto.toEntity(sender);
+        // 업로드 전에 전부 검증 (일부만 올라가는 것을 막는다)
+        List<MultipartFile> images = InquiryImageValidator.validate(inquiryCreateDto.getImageFiles(), 0);
 
-        for (MultipartFile image : inquiryCreateDto.getImageFiles()){
-            String url = s3Uploader.upload(image);
-            InquiryImage inquiryImage = InquiryImage.builder()
-                    .imageUrl(url)
-                    .inquiry(inquiry)
-                    .build();
-            inquiry.getInquiryImages().add(inquiryImage);
-        }
+        Inquiry inquiry = inquiryCreateDto.toEntity(sender);
+        addImages(inquiry, images);
         inquiryRepository.save(inquiry);
         // 알림 발송 + db 저장
         notificationService.create(sender, receiver, NotificationType.NEW_INQUIRY, inquiry);
@@ -77,6 +72,11 @@ public class InquiryService {
         validateOwner(inquiry, "본인 문의만 수정할 수 있습니다.");
         inquiry.validateEditable();
 
+        // 값을 바꾸거나 S3를 건드리기 전에 이미지 요청부터 모두 검증
+        List<InquiryImage> removedImages = inquiry.findImagesToRemove(inquiryUpdateDto.parseRemovedImageIndexes());
+        int keptImageCount = inquiry.getInquiryImages().size() - removedImages.size();
+        List<MultipartFile> newImages = InquiryImageValidator.validate(inquiryUpdateDto.getImageFiles(), keptImageCount);
+
         if (inquiryUpdateDto.getTitle() != null)
             inquiry.setTitle(inquiryUpdateDto.getTitle());
         if (inquiryUpdateDto.getContents() != null)
@@ -84,32 +84,35 @@ public class InquiryService {
         if (inquiryUpdateDto.getInquiryType() != null)
             inquiry.setInquiryType(inquiryUpdateDto.getInquiryType());
 
-        if (inquiry.getInquiryImages() != null && !inquiry.getInquiryImages().isEmpty()) {
-            for (InquiryImage inquiryImage : inquiry.getInquiryImages()) {
-                s3Uploader.delete(inquiryImage.getImageUrl());
-            }
-            inquiry.getInquiryImages().clear();
+        // 업로드가 실패해도 기존 이미지가 지워지지 않도록 새 이미지부터 올린다
+        addImages(inquiry, newImages);
+        for (InquiryImage removedImage : removedImages) {
+            s3Uploader.delete(removedImage.getImageUrl());
         }
-
-        if (inquiryUpdateDto.getImageFiles() != null) {
-            for (MultipartFile newImage : inquiryUpdateDto.getImageFiles()) {
-                String url = s3Uploader.upload(newImage);
-                InquiryImage inquiryImage = InquiryImage.builder()
-                        .imageUrl(url)
-                        .inquiry(inquiry)
-                        .build();
-                inquiry.getInquiryImages().add(inquiryImage);
-            }
-        }
-
+        inquiry.getInquiryImages().removeAll(removedImages);
 
         return inquiry.getInquiryId();
+    }
+
+    private void addImages(Inquiry inquiry, List<MultipartFile> images) {
+        for (MultipartFile image : images) {
+            String url = s3Uploader.upload(image);
+            InquiryImage inquiryImage = InquiryImage.builder()
+                    .imageUrl(url)
+                    .inquiry(inquiry)
+                    .build();
+            inquiry.getInquiryImages().add(inquiryImage);
+        }
     }
 
     public Long deleteInquiry(Long inquiryId){
         Inquiry inquiry = inquiryRepository.findById(inquiryId).orElseThrow(()->new EntityNotFoundException("존재하지 않는 글입니다."));
         validateOwner(inquiry, "본인 문의만 삭제할 수 있습니다.");
+        List<String> imageUrls = inquiry.getInquiryImages().stream()
+                .map(InquiryImage::getImageUrl)
+                .toList();
         inquiryRepository.delete(inquiry);
+        imageUrls.forEach(s3Uploader::delete);
     return inquiryId;
     }
 
