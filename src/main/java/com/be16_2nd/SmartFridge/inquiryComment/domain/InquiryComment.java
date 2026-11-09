@@ -16,6 +16,7 @@ public class InquiryComment extends BaseTimeEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long commentId;
+    @Column(columnDefinition = "TEXT")
     private String commentContents;
 
     // 문의 1건당 답변 1개 (uk_inquiry_comment_inquiry_id)

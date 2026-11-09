@@ -21,7 +21,8 @@ public class S3Uploader {
     private String bucket;
 
     public String upload(MultipartFile file) {
-        String key = file.getOriginalFilename();
+        // 원본 파일명을 키로 쓰면 이름이 같은 파일끼리 덮어쓰고, 한쪽을 지울 때 다른 쪽 파일까지 사라진다
+        String key = createKey(file.getOriginalFilename());
 
         try {
             PutObjectRequest request = PutObjectRequest.builder()
@@ -37,6 +38,18 @@ public class S3Uploader {
         } catch (IOException e) {
             throw new IllegalArgumentException("S3 업로드 실패", e);
         }
+    }
+
+    static String createKey(String originalFilename) {
+        String extension = "";
+        if (originalFilename != null) {
+            int dotIndex = originalFilename.lastIndexOf('.');
+            String candidate = dotIndex >= 0 ? originalFilename.substring(dotIndex) : "";
+            if (candidate.matches("\\.[A-Za-z0-9]{1,10}")) {
+                extension = candidate;
+            }
+        }
+        return UUID.randomUUID() + extension;
     }
 
     // 삭제 메서드

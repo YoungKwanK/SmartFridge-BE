@@ -5,6 +5,7 @@ import com.be16_2nd.SmartFridge.inquiry.dto.InquiryCreateDto;
 import com.be16_2nd.SmartFridge.inquiry.dto.InquiryResDto;
 import com.be16_2nd.SmartFridge.inquiry.dto.InquiryUpdateDto;
 import com.be16_2nd.SmartFridge.inquiry.service.InquiryService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -30,7 +31,7 @@ public class InquiryController {
 
 //    문의글 작성하기
     @PostMapping("/create")
-    public ResponseEntity<?> create(@ModelAttribute InquiryCreateDto inquiryCreateDto){
+    public ResponseEntity<?> create(@Valid @ModelAttribute InquiryCreateDto inquiryCreateDto){
         return new ResponseEntity<>(CommonDto.builder()
                 .result(inquiryService.create(inquiryCreateDto))
                 .status_code(HttpStatus.CREATED.value())
@@ -52,7 +53,7 @@ public class InquiryController {
 //    문의 수정하기
     @PatchMapping("/update/{inquiryId}")
     public ResponseEntity<?> updateInquiry(@PathVariable Long inquiryId,
-                                           @ModelAttribute InquiryUpdateDto inquiryUpdateDto){
+                                           @Valid @ModelAttribute InquiryUpdateDto inquiryUpdateDto){
 
         Long id = inquiryService.updateInquiry(inquiryId, inquiryUpdateDto);
 
