@@ -23,6 +23,7 @@ public class NotificationResDto {
     private Type fridgeMemberType;
     private TargetType targetType;
     private Long targetId;
+    private Long fridgeId;
     private LocalDateTime createdAt;
     // 새 문의 알림일 때 사용자가 선택한 문의 유형 (관리자 알림 목록에서만 사용)
     private InquiryType inquiryType;
@@ -42,6 +43,7 @@ public class NotificationResDto {
                 .fridgeMemberType(fridgeMemberType)
                 .targetType(notification.getTargetType())
                 .targetId(notification.getTargetId())
+                .fridgeId(notification.getFridge() != null ? notification.getFridge().getId() : null)
                 .createdAt(notification.getCreatedTime())
                 .build();
     }
