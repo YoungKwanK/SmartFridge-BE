@@ -15,6 +15,7 @@ import com.be16_2nd.SmartFridge.notification.service.NotificationService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -72,7 +73,9 @@ public class InquiryService {
 
     public Long updateInquiry(Long inquiryId, InquiryUpdateDto inquiryUpdateDto){
         Inquiry inquiry = inquiryRepository.findById(inquiryId)
-                .orElseThrow(() -> new RuntimeException("문의 없음"));
+                .orElseThrow(() -> new EntityNotFoundException("존재하지 않는 글입니다."));
+        validateOwner(inquiry, "본인 문의만 수정할 수 있습니다.");
+        inquiry.validateEditable();
 
         if (inquiryUpdateDto.getTitle() != null)
             inquiry.setTitle(inquiryUpdateDto.getTitle());
@@ -104,10 +107,17 @@ public class InquiryService {
     }
 
     public Long deleteInquiry(Long inquiryId){
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        Member member = memberRepository.findByEmail(email).orElseThrow(()->new EntityNotFoundException("존재하지 않는 사용자입니다."));
         Inquiry inquiry = inquiryRepository.findById(inquiryId).orElseThrow(()->new EntityNotFoundException("존재하지 않는 글입니다."));
+        validateOwner(inquiry, "본인 문의만 삭제할 수 있습니다.");
         inquiryRepository.delete(inquiry);
     return inquiryId;
+    }
+
+    private void validateOwner(Inquiry inquiry, String message) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        Member member = memberRepository.findByEmail(email).orElseThrow(()->new EntityNotFoundException("존재하지 않는 사용자입니다."));
+        if (!inquiry.isOwner(member)) {
+            throw new AccessDeniedException(message);
+        }
     }
 }
