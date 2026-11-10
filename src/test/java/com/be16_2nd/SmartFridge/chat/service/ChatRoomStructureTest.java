@@ -1,11 +1,12 @@
 package com.be16_2nd.SmartFridge.chat.service;
 
+import com.be16_2nd.SmartFridge.post.service.PostService;
+import com.be16_2nd.SmartFridge.support.PurchaseRoomFixture;
 import com.be16_2nd.SmartFridge.chat.domain.ChatParticipant;
 import com.be16_2nd.SmartFridge.chat.domain.ChatRoom;
 import com.be16_2nd.SmartFridge.chat.domain.ChatRoomType;
 import com.be16_2nd.SmartFridge.chat.domain.ParticipantRole;
 import com.be16_2nd.SmartFridge.chat.dto.ChatMessageDto;
-import com.be16_2nd.SmartFridge.chat.dto.ChatRoomCreateDto;
 import com.be16_2nd.SmartFridge.chat.dto.MyChatListResDto;
 import com.be16_2nd.SmartFridge.chat.repository.ChatRoomRepository;
 import com.be16_2nd.SmartFridge.chat.repository.PurchasePostRepository;
@@ -43,6 +44,7 @@ class ChatRoomStructureTest {
     @Autowired FridgeService fridgeService;
     @Autowired FridgeRepository fridgeRepository;
     @Autowired ChatService chatService;
+    @Autowired PostService postService;
     @Autowired ManagerChatRoomLifecycle lifecycle;
     @Autowired ChatRoomRepository chatRoomRepository;
     @Autowired PurchasePostRepository purchasePostRepository;
@@ -134,8 +136,7 @@ class ChatRoomStructureTest {
     @Test
     void 공동구매_채팅방은_게시글과_분리되고_방장이_나가면_함께_삭제된다() {
         login("a@test.com");
-        Long roomId = chatService.createPurchaseChatRoom(ChatRoomCreateDto.builder()
-                .fridgeId(fridgeId).title("우유 공구").maxParticipants(2).build());
+        Long roomId = PurchaseRoomFixture.openRoom(postService, purchasePostRepository, fridgeId, "우유 공구", 2);
         login("b@test.com");
         chatService.addParticipantToPurchaseChat(roomId);
         send(roomId, ChatRoomType.PURCHASE, "a@test.com", "언제 살까요");

@@ -1,7 +1,6 @@
 package com.be16_2nd.SmartFridge.post.service;
 
 import com.be16_2nd.SmartFridge.chat.domain.PurchasePost;
-import com.be16_2nd.SmartFridge.chat.dto.ChatRoomCreateDto;
 import com.be16_2nd.SmartFridge.chat.repository.ChatRoomRepository;
 import com.be16_2nd.SmartFridge.chat.repository.PurchasePostRepository;
 import com.be16_2nd.SmartFridge.chat.service.ChatService;
@@ -33,7 +32,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 공동구매 글(purchase_post)과 게시판 글(post) 연결 통합 테스트 (로컬 DB, 테스트마다 롤백)
- * - 게시판에서 쓰든 채팅에서 방을 만들든 post + 채팅방이 같이 생긴다
+ * - 게시판에 공동구매 글을 쓰면 post + 채팅방이 같이 생긴다 (채팅에서 따로 방을 만드는 API 는 없다)
  * - 게시글을 지워도 채팅방은 남는다
  * - 방장이 나가 채팅방이 지워지면 게시글(댓글 포함)도 지워진다
  */
@@ -87,21 +86,6 @@ class PurchasePostLinkTest {
         assertThat(purchasePost.getCreator().getEmail()).isEqualTo("a@pl.com");
         assertThat(purchasePost.getChatRoom().getParticipants())
                 .extracting(p -> p.getMember().getEmail()).containsExactly("a@pl.com");
-    }
-
-    @Test
-    void 채팅에서_방을_만들어도_게시판에_공동구매_글이_생긴다() {
-        login("a@pl.com");
-        Long roomId = chatService.createPurchaseChatRoom(ChatRoomCreateDto.builder()
-                .fridgeId(fridgeId).title("계란 공구").contents("같이 사요").maxParticipants(3).build());
-        flushClear();
-
-        Post post = purchasePostRepository.findByChatRoomId(roomId).orElseThrow().getPost();
-        assertThat(post.getCategory()).isEqualTo(PostCategory.공동구매);
-        assertThat(post.getTitle()).isEqualTo("계란 공구");
-        assertThat(post.getContent()).isEqualTo("같이 사요");
-        assertThat(post.getMember().getEmail()).isEqualTo("a@pl.com");
-        assertThat(chatService.getRoomInfo(roomId).getContents()).isEqualTo("같이 사요");
     }
 
     @Test

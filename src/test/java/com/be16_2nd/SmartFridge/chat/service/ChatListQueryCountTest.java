@@ -1,10 +1,11 @@
 package com.be16_2nd.SmartFridge.chat.service;
 
+import com.be16_2nd.SmartFridge.post.service.PostService;
+import com.be16_2nd.SmartFridge.chat.repository.PurchasePostRepository;
+import com.be16_2nd.SmartFridge.support.PurchaseRoomFixture;
 import com.be16_2nd.SmartFridge.chat.domain.ChatRoomType;
 import com.be16_2nd.SmartFridge.chat.dto.ChatMessageDto;
-import com.be16_2nd.SmartFridge.chat.dto.ChatRoomCreateDto;
 import com.be16_2nd.SmartFridge.chat.dto.MyChatListResDto;
-import com.be16_2nd.SmartFridge.chat.dto.PurchaseChatRoomListResDto;
 import com.be16_2nd.SmartFridge.fridge.dto.FridgeCreateDto;
 import com.be16_2nd.SmartFridge.fridge.dto.FridgeMemberWithRoomIdResDto;
 import com.be16_2nd.SmartFridge.fridge.repository.FridgeRepository;
@@ -41,6 +42,8 @@ class ChatListQueryCountTest {
     @Autowired FridgeService fridgeService;
     @Autowired FridgeRepository fridgeRepository;
     @Autowired ChatService chatService;
+    @Autowired PostService postService;
+    @Autowired PurchasePostRepository purchasePostRepository;
     @Autowired EntityManager em;
 
     Statistics statistics;
@@ -69,19 +72,16 @@ class ChatListQueryCountTest {
     }
 
     @Test
-    void 내_채팅방_목록과_모집중_목록은_방이_늘어도_쿼리_수가_같다() {
+    void 내_채팅방_목록은_방이_늘어도_쿼리_수가_같다() {
         addRoomsJoinedByMe(2);
         login("me@q.com");
         long myRoomsSmall = countQueries(() -> chatService.getMyChatRooms(fridgeId));
-        long openRoomsSmall = countQueries(() -> chatService.getPurchaseChatRooms(fridgeId));
 
         addRoomsJoinedByMe(5);
         login("me@q.com");
         long myRoomsLarge = countQueries(() -> chatService.getMyChatRooms(fridgeId));
-        long openRoomsLarge = countQueries(() -> chatService.getPurchaseChatRooms(fridgeId));
 
         assertThat(myRoomsLarge).isEqualTo(myRoomsSmall);
-        assertThat(openRoomsLarge).isEqualTo(openRoomsSmall);
     }
 
     @Test
@@ -100,9 +100,6 @@ class ChatListQueryCountTest {
         assertThat(mine.get(roomIds.get(0)).getUnReadCount()).isZero();
         assertThat(mine.get(roomIds.get(1)).getUnReadCount()).isEqualTo(1L);
 
-        Map<Long, PurchaseChatRoomListResDto> open = chatService.getPurchaseChatRooms(fridgeId).stream()
-                .collect(Collectors.toMap(PurchaseChatRoomListResDto::getRoomId, r -> r));
-        assertThat(open.get(roomIds.get(0)).getCurrentParticipants()).isEqualTo(2);
     }
 
     @Test
@@ -136,8 +133,7 @@ class ChatListQueryCountTest {
         for (int i = 0; i < count; i++) {
             String creator = addMembers(1).get(0);
             login(creator);
-            Long roomId = chatService.createPurchaseChatRoom(ChatRoomCreateDto.builder()
-                    .fridgeId(fridgeId).title("공구" + roomId(i)).maxParticipants(5).build());
+            Long roomId = PurchaseRoomFixture.openRoom(postService, purchasePostRepository, fridgeId, "공구" + roomId(i), 5);
             chatService.saveMessage(roomId, ChatRoomType.PURCHASE, creator, ChatMessageDto.builder().message("안녕").build());
             login("me@q.com");
             chatService.addParticipantToPurchaseChat(roomId);

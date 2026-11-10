@@ -1,6 +1,7 @@
 package com.be16_2nd.SmartFridge.chat.service;
 
-import com.be16_2nd.SmartFridge.chat.dto.ChatRoomCreateDto;
+import com.be16_2nd.SmartFridge.post.service.PostService;
+import com.be16_2nd.SmartFridge.support.PurchaseRoomFixture;
 import com.be16_2nd.SmartFridge.chat.repository.PurchasePostRepository;
 import com.be16_2nd.SmartFridge.fridge.dto.FridgeCreateDto;
 import com.be16_2nd.SmartFridge.fridge.repository.FridgeRepository;
@@ -36,6 +37,7 @@ class ChatPurchaseJoinConcurrencyTest {
     @Autowired FridgeService fridgeService;
     @Autowired FridgeRepository fridgeRepository;
     @Autowired ChatService chatService;
+    @Autowired PostService postService;
     @Autowired PurchasePostRepository purchasePostRepository;
     @Autowired TransactionTemplate transactionTemplate;
 
@@ -64,8 +66,7 @@ class ChatPurchaseJoinConcurrencyTest {
             fridgeService.joinFridge(inviteCode);
         }
         login(creator);
-        Long roomId = chatService.createPurchaseChatRoom(ChatRoomCreateDto.builder()
-                .fridgeId(fridgeId).title("동시 참여").maxParticipants(MAX_PARTICIPANTS).build());
+        Long roomId = PurchaseRoomFixture.openRoom(postService, purchasePostRepository, fridgeId, "동시 참여", MAX_PARTICIPANTS);
 
         // 모든 스레드가 준비된 뒤 한꺼번에 참여
         ExecutorService pool = Executors.newFixedThreadPool(JOINERS);

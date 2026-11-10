@@ -1,8 +1,9 @@
 package com.be16_2nd.SmartFridge.chat.service;
 
+import com.be16_2nd.SmartFridge.post.service.PostService;
+import com.be16_2nd.SmartFridge.support.PurchaseRoomFixture;
 import com.be16_2nd.SmartFridge.chat.domain.ChatRoomType;
 import com.be16_2nd.SmartFridge.chat.dto.ChatMessageDto;
-import com.be16_2nd.SmartFridge.chat.dto.ChatRoomCreateDto;
 import com.be16_2nd.SmartFridge.chat.repository.ChatRoomRepository;
 import com.be16_2nd.SmartFridge.chat.repository.PurchasePostRepository;
 import com.be16_2nd.SmartFridge.chat.service.Validator.ChatRoomParticipantValidator;
@@ -41,6 +42,7 @@ class ChatFridgeLeaveTest {
     @Autowired FridgeRepository fridgeRepository;
     @Autowired FridgeMemberRepository fridgeMemberRepository;
     @Autowired ChatService chatService;
+    @Autowired PostService postService;
     @Autowired ChatRoomRepository chatRoomRepository;
     @Autowired PurchasePostRepository purchasePostRepository;
     @Autowired ChatRoomParticipantValidator participantValidator;
@@ -117,8 +119,7 @@ class ChatFridgeLeaveTest {
     }
 
     private Long createRoom(String title) {
-        return chatService.createPurchaseChatRoom(ChatRoomCreateDto.builder()
-                .fridgeId(fridgeId).title(title).maxParticipants(3).build());
+        return PurchaseRoomFixture.openRoom(postService, purchasePostRepository, fridgeId, title, 3);
     }
 
     private List<String> participantEmails(Long roomId) {
