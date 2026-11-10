@@ -26,6 +26,11 @@ import java.time.LocalDateTime;
 @Builder
 @Entity
 public class PurchasePost {
+    // 모집 인원(개설자 포함) 범위와 상품 링크 형식. 게시판 공동구매 글 작성 시 확인한다
+    public static final int MIN_PARTICIPANTS = 2;
+    public static final int MAX_PARTICIPANTS = 20;
+    public static final String PRODUCT_URL_PATTERN = "^(https?://.*)?$";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

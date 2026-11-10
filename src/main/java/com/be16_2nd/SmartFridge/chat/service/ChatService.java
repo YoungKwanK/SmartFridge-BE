@@ -14,7 +14,6 @@ import com.be16_2nd.SmartFridge.member.repository.MemberRepository;
 import com.be16_2nd.SmartFridge.notification.domain.NotificationType;
 import com.be16_2nd.SmartFridge.notification.service.NotificationService;
 import com.be16_2nd.SmartFridge.post.domain.Post;
-import com.be16_2nd.SmartFridge.post.domain.PostCategory;
 import com.be16_2nd.SmartFridge.post.repository.PostRepository;
 import com.be16_2nd.SmartFridge.post.service.PostImageService;
 import jakarta.persistence.EntityNotFoundException;
@@ -184,25 +183,6 @@ public class ChatService {
                 .ifPresent(p -> p.readUpTo(chatMessageRepository.findLastMessageId(roomId)));
     }
 
-    // 공동 구매 채팅방 생성 (채팅 화면에서 만들어도 게시판에 공동구매 글이 같이 생긴다)
-    public Long createPurchaseChatRoom(ChatRoomCreateDto chatRoomCreateDto){
-        Member member = currentMember();
-        Fridge fridge = fridgeRepository.findById(chatRoomCreateDto.getFridgeId()).orElseThrow(() -> new EntityNotFoundException("fridge not found"));
-
-        // 해당 냉장고 참여자인지 확인
-        fridgeAccessValidator.validate(fridge.getId());
-
-        Post post = postRepository.save(Post.builder()
-                .title(chatRoomCreateDto.getTitle())
-                .content(chatRoomCreateDto.getContents() == null ? "" : chatRoomCreateDto.getContents())
-                .member(member)
-                .fridge(fridge)
-                .category(PostCategory.공동구매)
-                .build());
-
-        return openPurchaseRoom(member, fridge, post, chatRoomCreateDto.getMaxParticipants(), chatRoomCreateDto.getProductUrl());
-    }
-
     // 게시판 공동구매 글에 채팅방을 연다 (게시판 글 작성 / 채팅방 생성 공통). 권한 확인은 호출하는 쪽에서 한다
     public Long openPurchaseRoom(Member creator, Fridge fridge, Post post, Integer maxParticipants, String productUrl) {
         ChatRoom chatRoom = ChatRoom.builder()
@@ -222,32 +202,6 @@ public class ChatService {
         chatRoomRepository.save(chatRoom);
 
         return chatRoom.getId();
-    }
-
-    // 공동 구매 채팅방 목록 조회
-    public List<PurchaseChatRoomListResDto> getPurchaseChatRooms(Long fridgeID){
-        Member member = currentMember();
-        Fridge fridge = fridgeRepository.findById(fridgeID).orElseThrow(() -> new EntityNotFoundException("fridge not found"));
-
-        // 해당 냉장고 참여자인지 확인
-        fridgeAccessValidator.validate(fridge.getId());
-
-        // 방 수와 상관없이 쿼리 2번: 목록(방·방장 포함), 참여자 수
-        List<PurchasePost> posts = purchasePostRepository.findOpenPostsWithRoomAndCreator(fridge, JoinStatus.OPEN);
-        Map<Long, Long> participantCounts = participantCounts(posts.stream().map(p -> p.getChatRoom().getId()).toList());
-        List<PurchaseChatRoomListResDto> result = new ArrayList<>();
-        for(PurchasePost post : posts){
-            result.add(PurchaseChatRoomListResDto.builder()
-                    .roomId(post.getChatRoom().getId())
-                    .roomName(post.getTitle())
-                    .isCreator(post.getCreator().getId().equals(member.getId()))
-                    .currentParticipants(participantCounts.getOrDefault(post.getChatRoom().getId(), 0L).intValue())
-                    .maxParticipants(post.getMaxParticipants())
-                    .joinStatus(post.getJoinStatus().toString())
-                    .userName(post.getCreator().getName())
-                    .build());
-        }
-        return result;
     }
 
     // 공동 구매 채팅방에 참여자 추가

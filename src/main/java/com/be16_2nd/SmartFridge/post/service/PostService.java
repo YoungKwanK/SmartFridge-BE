@@ -1,7 +1,6 @@
 package com.be16_2nd.SmartFridge.post.service;
 
 import com.be16_2nd.SmartFridge.chat.domain.PurchasePost;
-import com.be16_2nd.SmartFridge.chat.dto.ChatRoomCreateDto;
 import com.be16_2nd.SmartFridge.chat.repository.PurchasePostRepository;
 import com.be16_2nd.SmartFridge.chat.service.ChatService;
 import com.be16_2nd.SmartFridge.common.service.FridgeAccessValidator;
@@ -306,13 +305,13 @@ public class PostService {
     private void validatePurchase(PostCreateDto createDto) {
         Integer maxParticipants = createDto.getMaxParticipants();
         if (maxParticipants == null
-                || maxParticipants < ChatRoomCreateDto.MIN_PARTICIPANTS
-                || maxParticipants > ChatRoomCreateDto.MAX_PARTICIPANTS) {
-            throw new IllegalArgumentException("모집 인원은 " + ChatRoomCreateDto.MIN_PARTICIPANTS + "~"
-                    + ChatRoomCreateDto.MAX_PARTICIPANTS + "명이어야 합니다.");
+                || maxParticipants < PurchasePost.MIN_PARTICIPANTS
+                || maxParticipants > PurchasePost.MAX_PARTICIPANTS) {
+            throw new IllegalArgumentException("모집 인원은 " + PurchasePost.MIN_PARTICIPANTS + "~"
+                    + PurchasePost.MAX_PARTICIPANTS + "명이어야 합니다.");
         }
         String productUrl = createDto.getProductUrl();
-        if (productUrl != null && (productUrl.length() > 255 || !productUrl.matches(ChatRoomCreateDto.PRODUCT_URL_PATTERN))) {
+        if (productUrl != null && (productUrl.length() > 255 || !productUrl.matches(PurchasePost.PRODUCT_URL_PATTERN))) {
             throw new IllegalArgumentException("상품 링크는 http(s) 주소여야 합니다.");
         }
     }
