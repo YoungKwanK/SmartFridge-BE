@@ -1,11 +1,12 @@
 package com.be16_2nd.SmartFridge.chat.service;
 
+import com.be16_2nd.SmartFridge.post.service.PostService;
+import com.be16_2nd.SmartFridge.support.PurchaseRoomFixture;
 import com.be16_2nd.SmartFridge.chat.config.StompHandler;
 import com.be16_2nd.SmartFridge.chat.domain.ChatMessage;
 import com.be16_2nd.SmartFridge.chat.domain.ChatRoomType;
 import com.be16_2nd.SmartFridge.chat.domain.JoinStatus;
 import com.be16_2nd.SmartFridge.chat.dto.ChatMessageDto;
-import com.be16_2nd.SmartFridge.chat.dto.ChatRoomCreateDto;
 import com.be16_2nd.SmartFridge.chat.repository.PurchasePostRepository;
 import com.be16_2nd.SmartFridge.fridge.dto.FridgeCreateDto;
 import com.be16_2nd.SmartFridge.fridge.repository.FridgeRepository;
@@ -43,6 +44,7 @@ class ChatSecurityTest {
     @Autowired FridgeService fridgeService;
     @Autowired FridgeRepository fridgeRepository;
     @Autowired ChatService chatService;
+    @Autowired PostService postService;
     @Autowired PurchasePostRepository purchasePostRepository;
     @Autowired StompHandler stompHandler;
     @Autowired ChatPresence chatPresence;
@@ -67,8 +69,7 @@ class ChatSecurityTest {
         fridgeService.joinFridge(inviteCode);
 
         login("a@sec.com");
-        purchaseRoomId = chatService.createPurchaseChatRoom(ChatRoomCreateDto.builder()
-                .fridgeId(fridgeId).title("공구").maxParticipants(3).build());
+        purchaseRoomId = PurchaseRoomFixture.openRoom(postService, purchasePostRepository, fridgeId, "공구", 3);
     }
 
     @AfterEach

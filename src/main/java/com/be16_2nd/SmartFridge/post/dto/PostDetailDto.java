@@ -28,6 +28,7 @@ public class PostDetailDto {
     private Long viewCount;
     private Long likeCount;
     private Boolean isLiked;
+    private PostPurchaseDto purchase;
 
     public static PostDetailDto fromEntity(Post post, Long viewCount, Long likeCount, Boolean isLiked ) {
         return PostDetailDto.builder()

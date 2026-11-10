@@ -1,10 +1,12 @@
 package com.be16_2nd.SmartFridge.chat.service;
 
+import com.be16_2nd.SmartFridge.post.service.PostService;
+import com.be16_2nd.SmartFridge.chat.repository.PurchasePostRepository;
+import com.be16_2nd.SmartFridge.support.PurchaseRoomFixture;
 import com.be16_2nd.SmartFridge.chat.config.StompEventListener;
 import com.be16_2nd.SmartFridge.chat.domain.ChatParticipant;
 import com.be16_2nd.SmartFridge.chat.domain.ChatRoomType;
 import com.be16_2nd.SmartFridge.chat.dto.ChatMessageDto;
-import com.be16_2nd.SmartFridge.chat.dto.ChatRoomCreateDto;
 import com.be16_2nd.SmartFridge.chat.repository.ChatRoomRepository;
 import com.be16_2nd.SmartFridge.fridge.dto.FridgeCreateDto;
 import com.be16_2nd.SmartFridge.fridge.repository.FridgeRepository;
@@ -49,6 +51,8 @@ class ChatPresenceTest {
     @Autowired FridgeService fridgeService;
     @Autowired FridgeRepository fridgeRepository;
     @Autowired ChatService chatService;
+    @Autowired PostService postService;
+    @Autowired PurchasePostRepository purchasePostRepository;
     @Autowired ChatRoomRepository chatRoomRepository;
 
     final List<String> usedKeys = new ArrayList<>(List.of(
@@ -113,8 +117,7 @@ class ChatPresenceTest {
         login("a@p.com");
         Long fridgeId = fridgeService.create(FridgeCreateDto.builder().fridgeName("접속냉장고").build()).getFridgeId();
         String inviteCode = fridgeRepository.findById(fridgeId).orElseThrow().getInviteCode();
-        Long roomId = chatService.createPurchaseChatRoom(ChatRoomCreateDto.builder()
-                .fridgeId(fridgeId).title("공구").maxParticipants(3).build());
+        Long roomId = PurchaseRoomFixture.openRoom(postService, purchasePostRepository, fridgeId, "공구", 3);
         usedKeys.add(ChatPresence.key(ChatRoomType.PURCHASE, roomId));
         for (String email : List.of("b@p.com", "c@p.com")) {
             login(email);

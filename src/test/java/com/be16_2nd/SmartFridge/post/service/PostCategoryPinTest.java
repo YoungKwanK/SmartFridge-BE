@@ -1,5 +1,7 @@
 package com.be16_2nd.SmartFridge.post.service;
 
+import com.be16_2nd.SmartFridge.chat.repository.PurchasePostRepository;
+import com.be16_2nd.SmartFridge.chat.service.ChatService;
 import com.be16_2nd.SmartFridge.common.service.FridgeAccessValidator;
 import com.be16_2nd.SmartFridge.fridge.domain.Fridge;
 import com.be16_2nd.SmartFridge.fridge.domain.FridgeMember;
@@ -44,6 +46,8 @@ class PostCategoryPinTest {
     @Mock PostRepository postRepository;
     @Mock NotificationService notificationService;
     @Mock FridgeMemberRepository fridgeMemberRepository;
+    @Mock ChatService chatService;
+    @Mock PurchasePostRepository purchasePostRepository;
 
     @InjectMocks PostService postService;
 
@@ -71,6 +75,27 @@ class PostCategoryPinTest {
         assertThat(saved.getAllValues()).extracting(Post::getCategory)
                 .containsExactly(PostCategory.자유게시판, PostCategory.공동구매);
         assertThat(saved.getAllValues()).extracting(Post::isPinned).containsOnly(false);
+    }
+
+    @Test
+    void 공동구매_글을_쓰면_채팅방을_같이_연다() {
+        loginAs(member, Type.COMMON);
+
+        postService.createPost(fridgeId, createDto(PostCategory.공동구매));
+
+        verify(chatService).openPurchaseRoom(eq(member), eq(fridge), any(Post.class), eq(4), eq(null));
+    }
+
+    @Test
+    void 공동구매_모집_인원이_범위를_벗어나면_글을_쓰지_않는다() {
+        loginAs(member, Type.COMMON);
+        PostCreateDto tooMany = createDto(PostCategory.공동구매);
+        tooMany.setMaxParticipants(21);
+
+        assertThatThrownBy(() -> postService.createPost(fridgeId, tooMany))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(postRepository, never()).save(any());
     }
 
     @Test
@@ -192,7 +217,12 @@ class PostCategoryPinTest {
     }
 
     private PostCreateDto createDto(PostCategory category) {
-        return PostCreateDto.builder().title("제목").content("내용").category(category).build();
+        PostCreateDto.PostCreateDtoBuilder builder = PostCreateDto.builder().title("제목").content("내용").category(category);
+        // 공동구매 글은 모집 인원이 필요하다
+        if (category == PostCategory.공동구매) {
+            builder.maxParticipants(4);
+        }
+        return builder.build();
     }
 
     private Post post(Long id, Fridge postFridge, PostCategory category) {

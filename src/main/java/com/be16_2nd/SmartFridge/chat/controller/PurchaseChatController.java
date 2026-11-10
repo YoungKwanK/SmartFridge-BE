@@ -2,10 +2,8 @@ package com.be16_2nd.SmartFridge.chat.controller;
 
 import com.be16_2nd.SmartFridge.chat.domain.ChatRoomType;
 import com.be16_2nd.SmartFridge.chat.dto.ChatMessageDto;
-import com.be16_2nd.SmartFridge.chat.dto.ChatRoomCreateDto;
 import com.be16_2nd.SmartFridge.chat.service.ChatService;
 import com.be16_2nd.SmartFridge.common.dto.CommonDto;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -45,26 +43,6 @@ public class PurchaseChatController {
                 .result("ok")
                 .status_code(HttpStatus.OK.value())
                 .status_message("채팅내역 읽음 처리 성공")
-                .build(), HttpStatus.OK);
-    }
-
-    // 공동구매 채팅방 개설
-    @PostMapping("/create")
-    public ResponseEntity<?> createPurchaseRoom(@RequestBody @Valid ChatRoomCreateDto chatRoomCreateDto){
-        return new ResponseEntity<>(CommonDto.builder()
-                .result(chatService.createPurchaseChatRoom(chatRoomCreateDto))
-                .status_code(HttpStatus.CREATED.value())
-                .status_message("공동구매 채팅방 개설 성공")
-                .build(), HttpStatus.CREATED);
-    }
-
-    //    그룹채팅목록조회
-    @GetMapping("/list/{fridgeId}")
-    public ResponseEntity<?> getPurchaseChatRooms(@PathVariable Long fridgeId){
-        return new ResponseEntity<>(CommonDto.builder()
-                .result(chatService.getPurchaseChatRooms(fridgeId))
-                .status_code(HttpStatus.OK.value())
-                .status_message("공동구매 채팅방 목록 조회 성공")
                 .build(), HttpStatus.OK);
     }
 
