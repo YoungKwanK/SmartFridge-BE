@@ -3,7 +3,9 @@ package com.be16_2nd.SmartFridge.food.service;
 import com.be16_2nd.SmartFridge.common.service.FridgeAccessValidator;
 import com.be16_2nd.SmartFridge.fridge.domain.Type;
 import com.be16_2nd.SmartFridge.food.domain.Food;
+import com.be16_2nd.SmartFridge.food.domain.FoodHistory;
 import com.be16_2nd.SmartFridge.food.dto.*;
+import com.be16_2nd.SmartFridge.food.repository.FoodHistoryRepository;
 import com.be16_2nd.SmartFridge.food.repository.FoodRepository;
 import com.be16_2nd.SmartFridge.member.domain.Member;
 import jakarta.persistence.EntityNotFoundException;
@@ -16,6 +18,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -32,6 +35,7 @@ import java.util.UUID;
 public class FoodService {
 
     private final FoodRepository foodRepository;
+    private final FoodHistoryRepository foodHistoryRepository;
     private final FridgeAccessValidator fridgeAccessValidator;
 
     private static final int MAX_REGISTER_COUNT = 30;
@@ -70,24 +74,56 @@ public class FoodService {
 
 
     public FoodResDto updateFood(Long fridgeId, Long foodId, FoodUpdateDto foodUpdateDto) {
-        fridgeAccessValidator.validate(fridgeId);
-        Food food = foodRepository.findById(foodId)
-                .orElseThrow(() -> new EntityNotFoundException("없는 식품입니다. ID: " + foodId));
-        if (!food.getFridge().getId().equals(fridgeId)) {
-            throw new IllegalArgumentException("해당 냉장고에 존재하지 않는 식품입니다.");
-        }
+        FridgeAccessValidator.FridgeContext context = fridgeAccessValidator.validate(fridgeId);
+        Food food = findHandleableFood(context, fridgeId, foodId);
         Food updatedFood = food.updateFood(foodUpdateDto);
         return FoodResDto.fromEntity(updatedFood);
     }
 
+    // 잘못 등록한 식품을 지울 때 사용. 기록을 남기지 않는다.
     public void deleteFood(Long fridgeId, Long foodId) {
         FridgeAccessValidator.FridgeContext context = fridgeAccessValidator.validate(fridgeId);
+        Food food = findHandleableFood(context, fridgeId, foodId);
+        foodRepository.delete(food);
+    }
+
+    // 다 먹었거나 버린 식품을 기록으로 남기고 냉장고에서 뺀다.
+    public void finishFood(Long fridgeId, Long foodId, FoodFinishDto foodFinishDto) {
+        if (foodFinishDto == null || foodFinishDto.getResult() == null) {
+            throw new IllegalArgumentException("처리 결과(소비 또는 폐기)를 선택해 주세요.");
+        }
+        FridgeAccessValidator.FridgeContext context = fridgeAccessValidator.validate(fridgeId);
+        Food food = findHandleableFood(context, fridgeId, foodId);
+
+        foodHistoryRepository.save(FoodHistory.of(food, foodFinishDto.getResult(), LocalDateTime.now()));
+        foodRepository.delete(food);
+    }
+
+    /**
+     * 식품을 찾고, 요청한 회원이 이 식품을 수정·삭제·처리할 수 있는지 확인한다.
+     * 식품 목록에 보이는 범위와 같다: 관리자는 전부, 일반 멤버는 공유식품과 자기 식품만.
+     */
+    private Food findHandleableFood(FridgeAccessValidator.FridgeContext context, Long fridgeId, Long foodId) {
         Food food = foodRepository.findById(foodId)
-                .orElseThrow(() -> new EntityNotFoundException("삭제할 식품을 찾을 수 없습니다. ID: " + foodId));
+                .orElseThrow(() -> new EntityNotFoundException("식품을 찾을 수 없습니다. ID: " + foodId));
         if (!food.getFridge().getId().equals(fridgeId)) {
             throw new IllegalArgumentException("해당 냉장고에 존재하지 않는 식품입니다.");
         }
-        foodRepository.delete(food);
+        if (!canHandle(context, food)) {
+            throw new AccessDeniedException("다른 멤버의 비공유 식품은 수정하거나 삭제할 수 없습니다.");
+        }
+        return food;
+    }
+
+    private boolean canHandle(FridgeAccessValidator.FridgeContext context, Food food) {
+        if (context.type() == Type.MANAGER) {
+            return true;
+        }
+        if (Boolean.TRUE.equals(food.getIsShared())) {
+            return true;
+        }
+        Member owner = food.getMember();
+        return owner != null && owner.getId().equals(context.member().getId());
     }
 
     @Transactional(readOnly = true)
