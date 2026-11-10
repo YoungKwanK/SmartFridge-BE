@@ -18,4 +18,8 @@ public class PostCreateDto {
     private PostCategory category;
     private List<String> imageUrls;
 
+    // 공동구매 글일 때만 사용 (작성하면 채팅방이 같이 생긴다)
+    private Integer maxParticipants;
+    private String productUrl;
+
 }

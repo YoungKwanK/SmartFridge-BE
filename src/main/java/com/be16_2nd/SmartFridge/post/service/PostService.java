@@ -1,5 +1,9 @@
 package com.be16_2nd.SmartFridge.post.service;
 
+import com.be16_2nd.SmartFridge.chat.domain.PurchasePost;
+import com.be16_2nd.SmartFridge.chat.dto.ChatRoomCreateDto;
+import com.be16_2nd.SmartFridge.chat.repository.PurchasePostRepository;
+import com.be16_2nd.SmartFridge.chat.service.ChatService;
 import com.be16_2nd.SmartFridge.common.service.FridgeAccessValidator;
 import com.be16_2nd.SmartFridge.common.service.FridgeAccessValidator.FridgeContext;
 import com.be16_2nd.SmartFridge.post.domain.Post;
@@ -53,6 +57,8 @@ public class PostService {
     private final FridgeMemberRepository fridgeMemberRepository;
     private final PostStatsService postStatsService;
     private final RabbitMqService rabbitMqService;
+    private final ChatService chatService;
+    private final PurchasePostRepository purchasePostRepository;
 
     public Long createPost(Long fridgeId, PostCreateDto createDto) {
         FridgeContext context = fridgeAccessValidator.validate(fridgeId);
@@ -61,6 +67,9 @@ public class PostService {
 
         PostCategory postCategory = createDto.getCategory();
         validateCategory(postCategory, context.type());
+        if (postCategory == PostCategory.공동구매) {
+            validatePurchase(createDto);
+        }
 
         Post post = Post.builder()
                 .title(createDto.getTitle())
@@ -77,6 +86,11 @@ public class PostService {
                 PostImage postImage = PostImage.builder().imageUrl(url).post(post).build();
                 postImageRepository.save(postImage);
             });
+        }
+
+        // 공동구매 글은 채팅방을 같이 연다
+        if (postCategory == PostCategory.공동구매) {
+            chatService.openPurchaseRoom(member, fridge, post, createDto.getMaxParticipants(), createDto.getProductUrl());
         }
 
         if (postCategory == PostCategory.공지사항) {
@@ -109,6 +123,11 @@ public class PostService {
             throw new AccessDeniedException("수정 권한이 없습니다.");
         }
 
+        // 공동구매 글은 채팅방과 연결되어 있어서 다른 카테고리와 서로 바꿀 수 없다
+        if ((post.getCategory() == PostCategory.공동구매) != (updateDto.getCategory() == PostCategory.공동구매)) {
+            throw new IllegalArgumentException("공동구매 글은 카테고리를 바꿀 수 없습니다.");
+        }
+
         List<String> newImageUrls = updateDto.getImageUrls() != null ?
                 updateDto.getImageUrls() : new ArrayList<>();
 
@@ -126,6 +145,11 @@ public class PostService {
                 .forEach(postImage -> post.getImages().add(postImage));
 
         post.updatePost(updateDto);
+        // 채팅방 이름도 게시글 제목에 맞춘다
+        if (post.getCategory() == PostCategory.공동구매) {
+            purchasePostRepository.findByPostId(post.getId())
+                    .ifPresent(purchasePost -> purchasePost.updateTitle(post.getTitle()));
+        }
 
         return post.getId();
     }
@@ -145,6 +169,9 @@ public class PostService {
         if (!post.getMember().getId().equals(member.getId())) {
             throw new AccessDeniedException("삭제 권한이 없습니다.");
         }
+
+        // 공동구매 글이면 채팅방은 남기고 연결만 끊는다
+        purchasePostRepository.findByPostId(post.getId()).ifPresent(PurchasePost::detachPost);
 
         post.getImages().forEach(image -> postImageService.deleteImage(image.getImageUrl()));
         postRepository.delete(post);
@@ -170,7 +197,12 @@ public class PostService {
 
         rabbitMqService.publishViewUpdate(post.getId());
 
-        return PostDetailDto.fromEntity(post,viewCount,likeCount, likedByUser);
+        PostDetailDto postDetailDto = PostDetailDto.fromEntity(post,viewCount,likeCount, likedByUser);
+        if (post.getCategory() == PostCategory.공동구매) {
+            purchasePostRepository.findByPostId(post.getId())
+                    .ifPresent(purchasePost -> postDetailDto.setPurchase(PostPurchaseDto.fromEntity(purchasePost, member)));
+        }
+        return postDetailDto;
     }
 
     @Transactional(readOnly = true)
@@ -267,6 +299,21 @@ public class PostService {
         }
         if (category == PostCategory.공지사항 && memberType != Type.MANAGER) {
             throw new AccessDeniedException("공지사항은 해당 냉장고의 매니저만 작성할 수 있습니다.");
+        }
+    }
+
+    // 공동구매 글의 모집 인원·상품 링크 확인 (채팅방 생성 요청과 같은 기준)
+    private void validatePurchase(PostCreateDto createDto) {
+        Integer maxParticipants = createDto.getMaxParticipants();
+        if (maxParticipants == null
+                || maxParticipants < ChatRoomCreateDto.MIN_PARTICIPANTS
+                || maxParticipants > ChatRoomCreateDto.MAX_PARTICIPANTS) {
+            throw new IllegalArgumentException("모집 인원은 " + ChatRoomCreateDto.MIN_PARTICIPANTS + "~"
+                    + ChatRoomCreateDto.MAX_PARTICIPANTS + "명이어야 합니다.");
+        }
+        String productUrl = createDto.getProductUrl();
+        if (productUrl != null && (productUrl.length() > 255 || !productUrl.matches(ChatRoomCreateDto.PRODUCT_URL_PATTERN))) {
+            throw new IllegalArgumentException("상품 링크는 http(s) 주소여야 합니다.");
         }
     }
 
