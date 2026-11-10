@@ -27,7 +27,7 @@ public class PurchaseChatRoomResDto {
                 .roomName(purchaseChatRoom.getTitle())
                 .userName(purchaseChatRoom.getCreator().getName())
                 .createdAt(purchaseChatRoom.getCreatedTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH시 mm분")))
-                .contents(purchaseChatRoom.getContents())
+                .contents(purchaseChatRoom.getPost() == null ? null : purchaseChatRoom.getPost().getContent())
                 .currentParticipants(purchaseChatRoom.getCurrentParticipants())
                 .maxParticipants(purchaseChatRoom.getMaxParticipants())
                 .joinStatus(purchaseChatRoom.getJoinStatus().toString())

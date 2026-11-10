@@ -14,6 +14,7 @@ import java.util.Optional;
 @Repository
 public interface PurchasePostRepository extends JpaRepository<PurchasePost, Long> {
     Optional<PurchasePost> findByChatRoomId(Long chatRoomId);
+    Optional<PurchasePost> findByPostId(Long postId);
     // 모집 중인 공동구매 목록: 방·방장을 함께 조회
     @Query("select pp from PurchasePost pp join fetch pp.chatRoom r join fetch pp.creator " +
             "where r.fridge = :fridge and pp.joinStatus = :joinStatus and pp.isActive = true " +

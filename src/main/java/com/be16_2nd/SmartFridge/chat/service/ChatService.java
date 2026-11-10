@@ -13,6 +13,10 @@ import com.be16_2nd.SmartFridge.member.domain.Member;
 import com.be16_2nd.SmartFridge.member.repository.MemberRepository;
 import com.be16_2nd.SmartFridge.notification.domain.NotificationType;
 import com.be16_2nd.SmartFridge.notification.service.NotificationService;
+import com.be16_2nd.SmartFridge.post.domain.Post;
+import com.be16_2nd.SmartFridge.post.domain.PostCategory;
+import com.be16_2nd.SmartFridge.post.repository.PostRepository;
+import com.be16_2nd.SmartFridge.post.service.PostImageService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -49,6 +53,8 @@ public class ChatService {
     private final ManagerChatRoomLifecycle managerChatRoomLifecycle;
     private final NotificationService notificationService;
     private final ChatPresence chatPresence;
+    private final PostRepository postRepository;
+    private final PostImageService postImageService;
 
     // 메시지 저장 (1대1 / 공동구매 공통)
     // senderEmail 은 인증된 세션 사용자여야 한다 (클라이언트가 보낸 값 사용 금지)
@@ -178,7 +184,7 @@ public class ChatService {
                 .ifPresent(p -> p.readUpTo(chatMessageRepository.findLastMessageId(roomId)));
     }
 
-    // 공동 구매 채팅방 생성
+    // 공동 구매 채팅방 생성 (채팅 화면에서 만들어도 게시판에 공동구매 글이 같이 생긴다)
     public Long createPurchaseChatRoom(ChatRoomCreateDto chatRoomCreateDto){
         Member member = currentMember();
         Fridge fridge = fridgeRepository.findById(chatRoomCreateDto.getFridgeId()).orElseThrow(() -> new EntityNotFoundException("fridge not found"));
@@ -186,13 +192,33 @@ public class ChatService {
         // 해당 냉장고 참여자인지 확인
         fridgeAccessValidator.validate(fridge.getId());
 
+        Post post = postRepository.save(Post.builder()
+                .title(chatRoomCreateDto.getTitle())
+                .content(chatRoomCreateDto.getContents() == null ? "" : chatRoomCreateDto.getContents())
+                .member(member)
+                .fridge(fridge)
+                .category(PostCategory.공동구매)
+                .build());
+
+        return openPurchaseRoom(member, fridge, post, chatRoomCreateDto.getMaxParticipants(), chatRoomCreateDto.getProductUrl());
+    }
+
+    // 게시판 공동구매 글에 채팅방을 연다 (게시판 글 작성 / 채팅방 생성 공통). 권한 확인은 호출하는 쪽에서 한다
+    public Long openPurchaseRoom(Member creator, Fridge fridge, Post post, Integer maxParticipants, String productUrl) {
         ChatRoom chatRoom = ChatRoom.builder()
                 .type(ChatRoomType.PURCHASE)
                 .fridge(fridge)
                 .build();
-        chatRoom.attachPurchasePost(chatRoomCreateDto.toPurchasePost(member, chatRoom));
+        chatRoom.attachPurchasePost(PurchasePost.builder()
+                .chatRoom(chatRoom)
+                .post(post)
+                .creator(creator)
+                .title(post.getTitle())
+                .maxParticipants(maxParticipants)
+                .productUrl(productUrl)
+                .build());
         // 개설자를 채팅 참여자로 추가
-        chatRoom.addParticipant(member, ParticipantRole.MEMBER);
+        chatRoom.addParticipant(creator, ParticipantRole.MEMBER);
         chatRoomRepository.save(chatRoom);
 
         return chatRoom.getId();
@@ -292,9 +318,17 @@ public class ChatService {
         }
     }
 
-    // 방장이 나가면 채팅방 삭제(하드), 아니면 참여자만 제거
+    // 방장이 나가면 채팅방과 게시판 공동구매 글을 삭제(하드), 아니면 참여자만 제거
     private void leaveRoom(ChatRoom chatRoom, ChatParticipant chatParticipant) {
-        if (chatRoom.getPurchasePost().getCreator().getId().equals(chatParticipant.getMember().getId())) {
+        PurchasePost purchasePost = chatRoom.getPurchasePost();
+        if (purchasePost.getCreator().getId().equals(chatParticipant.getMember().getId())) {
+            // 게시글 연결을 먼저 끊고 지운다 (지운 게시글을 purchase_post 가 계속 가리키면 flush 때 오류). 댓글·좋아요·이미지는 cascade
+            Post post = purchasePost.getPost();
+            if (post != null) {
+                purchasePost.detachPost();
+                post.getImages().forEach(image -> postImageService.deleteImage(image.getImageUrl()));
+                postRepository.delete(post);
+            }
             chatRoom.getFridge().getChatRooms().remove(chatRoom);
             chatRoomRepository.delete(chatRoom);
         } else {

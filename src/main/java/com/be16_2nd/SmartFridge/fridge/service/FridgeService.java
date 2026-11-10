@@ -197,9 +197,11 @@ public class FridgeService {
             fridgeMemberRepository.deleteByFridgeAndMember(context.fridge(), context.member());
             // 식품은 삭제하지 않고 등록자 없음 + 공유 식품으로 남김
             foodRepository.releaseAllByFridgeAndMember(context.fridge(), context.member());
-            postRepository.deleteAllByFridgeAndMember(context.fridge(), context.member());
             managerChatRoomLifecycle.deleteManagerChatRoom(context.member(), context.fridge());
+            // 공동구매 방부터 정리한다: 만든 방은 게시판 공동구매 글과 같이 지워지므로, 게시글 일괄 삭제가 먼저 오면
+            // purchase_post 가 지운 게시글을 가리킨 채로 flush 되어 오류가 난다
             chatService.leaveAllPurchaseChatRooms(context.fridge(), context.member());
+            postRepository.deleteAllByFridgeAndMember(context.fridge(), context.member());
         }
         return context.fridge().getId();
     }
