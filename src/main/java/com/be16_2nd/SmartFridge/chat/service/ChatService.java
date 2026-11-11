@@ -56,6 +56,7 @@ public class ChatService {
     private final PostRepository postRepository;
     private final PostImageService postImageService;
     private final ApplicationEventPublisher eventPublisher;
+    private final ChatImageCleanup chatImageCleanup;
 
     // 메시지 저장 (1대1 / 공동구매 공통)
     // senderEmail 은 인증된 세션 사용자여야 한다 (클라이언트가 보낸 값 사용 금지)
@@ -300,6 +301,7 @@ public class ChatService {
                 post.getImages().forEach(image -> postImageService.deleteImage(image.getImageUrl()));
                 postRepository.delete(post);
             }
+            chatImageCleanup.beforeRoomDeleted(chatRoom.getId());
             chatRoom.getFridge().getChatRooms().remove(chatRoom);
             chatRoomRepository.delete(chatRoom);
         } else {

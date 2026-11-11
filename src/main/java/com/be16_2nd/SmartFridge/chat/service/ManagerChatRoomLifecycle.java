@@ -39,6 +39,7 @@ public class ManagerChatRoomLifecycle {
     private final ChatMessageRepository chatMessageRepository;
     private final FridgeMemberRepository fridgeMemberRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final ChatImageCleanup chatImageCleanup;
 
     // 1대1 채팅방 생성
     public void createManagerChatRoom(Member member, Fridge fridge) {
@@ -68,6 +69,7 @@ public class ManagerChatRoomLifecycle {
     // 냉장고 나갈 시 채팅방 삭제
     public void deleteManagerChatRoom(Member member, Fridge fridge) {
         findManagerChatRoom(fridge, member).ifPresent(chatRoom -> {
+            chatImageCleanup.beforeRoomDeleted(chatRoom.getId());
             fridge.getChatRooms().remove(chatRoom);
             chatRoomRepository.delete(chatRoom);
         });

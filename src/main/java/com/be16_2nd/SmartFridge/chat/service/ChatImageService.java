@@ -2,11 +2,16 @@ package com.be16_2nd.SmartFridge.chat.service;
 
 import com.be16_2nd.SmartFridge.chat.domain.ChatRoomType;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.services.s3.model.Delete;
+import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
+import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.io.IOException;
@@ -20,13 +25,17 @@ import java.util.UUID;
  *   (html·svg 등을 이미지로 속여 올려 버킷 주소에서 스크립트가 실행되는 것을 막는다)
  * - 저장 경로 : {manager|purchase}/chat/{roomId}/{uuid}.{확장자}
  * - 메시지에 담기는 이미지 URL 은 이 방 경로로 업로드된 것만 허용한다
+ * - 채팅방이 삭제되면 그 방의 메시지 이미지를 지운다 (ChatImageCleanup)
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ChatImageService {
 
     static final int MAX_IMAGES_PER_MESSAGE = 10;
     static final long MAX_IMAGE_BYTES = 10L * 1024 * 1024;
+    // S3 DeleteObjects 한 번에 지울 수 있는 최대 개수
+    static final int DELETE_BATCH_SIZE = 1000;
 
     private final S3Client s3Client;
 
@@ -80,6 +89,41 @@ public class ChatImageService {
                 throw new IllegalArgumentException("이 채팅방에 업로드된 이미지만 보낼 수 있습니다.");
             }
         }
+    }
+
+    // 채팅 이미지 삭제 (이 버킷의 채팅 경로 이미지만, 1000개씩 묶어서)
+    // 커밋 뒤에 호출되므로 실패해도 예외를 던지지 않고 로그만 남긴다 (DB는 이미 지워짐)
+    public void deleteImages(List<String> imageUrls) {
+        // 버킷 주소 (S3 는 빈 key 로 URL 을 만들 수 없어 임의 key 로 만든 뒤 잘라낸다)
+        String probe = urlOf("x");
+        String base = probe.substring(0, probe.length() - 1);
+        List<ObjectIdentifier> keys = imageUrls.stream()
+                .filter(url -> url != null && url.startsWith(base))
+                .map(url -> url.substring(base.length()))
+                .filter(ChatImageService::isChatImageKey)
+                .distinct()
+                .map(key -> ObjectIdentifier.builder().key(key).build())
+                .toList();
+        for (int from = 0; from < keys.size(); from += DELETE_BATCH_SIZE) {
+            List<ObjectIdentifier> batch = keys.subList(from, Math.min(from + DELETE_BATCH_SIZE, keys.size()));
+            try {
+                s3Client.deleteObjects(DeleteObjectsRequest.builder()
+                        .bucket(bucket)
+                        .delete(Delete.builder().objects(batch).quiet(true).build())
+                        .build());
+            } catch (SdkException e) {
+                log.warn("채팅 이미지 S3 삭제 실패 {}개", batch.size(), e);
+            }
+        }
+    }
+
+    private static boolean isChatImageKey(String key) {
+        for (ChatRoomType type : ChatRoomType.values()) {
+            if (key.startsWith(type.name().toLowerCase() + "/chat/") && !key.contains("..")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     static String keyPrefix(ChatRoomType type, Long roomId) {

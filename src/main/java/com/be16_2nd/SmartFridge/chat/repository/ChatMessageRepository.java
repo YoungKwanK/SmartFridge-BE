@@ -37,6 +37,13 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
             "group by cp.chatRoom.id")
     List<RoomCount> countUnreadByRoomIds(@Param("memberId") UUID memberId, @Param("roomIds") Collection<Long> roomIds);
 
+    // 채팅방 삭제 시 S3에서 지울 메시지 이미지 URL
+    @Query("select i.imageUrl from ChatMessageImage i where i.chatMessage.chatRoom.id = :roomId")
+    List<String> findImageUrlsByRoomId(@Param("roomId") Long roomId);
+
+    @Query("select i.imageUrl from ChatMessageImage i where i.chatMessage.chatRoom.fridge.id = :fridgeId")
+    List<String> findImageUrlsByFridgeId(@Param("fridgeId") Long fridgeId);
+
     @Query("select coalesce(max(m.id), 0) from ChatMessage m where m.chatRoom.id = :roomId")
     Long findLastMessageId(@Param("roomId") Long roomId);
 }
