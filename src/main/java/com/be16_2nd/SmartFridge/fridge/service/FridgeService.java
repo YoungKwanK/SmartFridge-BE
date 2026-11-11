@@ -2,6 +2,7 @@ package com.be16_2nd.SmartFridge.fridge.service;
 
 import com.be16_2nd.SmartFridge.post.repository.PostRepository;
 import com.be16_2nd.SmartFridge.chat.domain.ChatRoom;
+import com.be16_2nd.SmartFridge.chat.service.ChatImageCleanup;
 import com.be16_2nd.SmartFridge.chat.service.ChatService;
 import com.be16_2nd.SmartFridge.common.service.FridgeAccessValidator;
 import com.be16_2nd.SmartFridge.chat.service.ManagerChatRoomLifecycle;
@@ -47,6 +48,7 @@ public class FridgeService {
     private final FoodRepository foodRepository;
     private final PostRepository postRepository;
     private final ChatService chatService;
+    private final ChatImageCleanup chatImageCleanup;
 
     @Value("${app.invite-base-url}")
     private String inviteBaseUrl;
@@ -183,6 +185,8 @@ public class FridgeService {
         if(!context.type().equals(Type.MANAGER)){
             throw new AccessDeniedException("MANAGER만 삭제할 수 있습니다");
         } else {
+            // 냉장고와 함께 지워지는 채팅방들의 메시지 이미지도 커밋 뒤 S3에서 삭제
+            chatImageCleanup.beforeFridgeDeleted(context.fridge().getId());
             fridgeRepository.deleteById(context.fridge().getId());
         }
         return context.fridge().getId();

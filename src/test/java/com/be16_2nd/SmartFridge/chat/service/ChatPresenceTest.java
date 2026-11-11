@@ -7,6 +7,7 @@ import com.be16_2nd.SmartFridge.chat.config.StompEventListener;
 import com.be16_2nd.SmartFridge.chat.domain.ChatParticipant;
 import com.be16_2nd.SmartFridge.chat.domain.ChatRoomType;
 import com.be16_2nd.SmartFridge.chat.dto.ChatMessageDto;
+import com.be16_2nd.SmartFridge.chat.dto.ChatMessageEmailDto;
 import com.be16_2nd.SmartFridge.chat.repository.ChatRoomRepository;
 import com.be16_2nd.SmartFridge.fridge.dto.FridgeCreateDto;
 import com.be16_2nd.SmartFridge.fridge.repository.FridgeRepository;
@@ -137,6 +138,30 @@ class ChatPresenceTest {
         assertThat(cursors.get("a@p.com")).isEqualTo(messageId);
         assertThat(cursors.get("b@p.com")).isEqualTo(messageId);
         assertThat(cursors.get("c@p.com")).isLessThan(messageId);
+    }
+
+    @Test
+    void 지금_방을_보고_있는_참여자는_채팅_알림_대상에서_빠진다() {
+        memberService.socialLogin(SocialType.GOOGLE, "n-a", "a@n.com", true, "회원A", null);
+        memberService.socialLogin(SocialType.GOOGLE, "n-b", "b@n.com", true, "회원B", null);
+        memberService.socialLogin(SocialType.GOOGLE, "n-c", "c@n.com", true, "회원C", null);
+        login("a@n.com");
+        Long fridgeId = fridgeService.create(FridgeCreateDto.builder().fridgeName("알림냉장고").build()).getFridgeId();
+        String inviteCode = fridgeRepository.findById(fridgeId).orElseThrow().getInviteCode();
+        Long roomId = PurchaseRoomFixture.openRoom(postService, purchasePostRepository, fridgeId, "공구", 3);
+        usedKeys.add(ChatPresence.key(ChatRoomType.PURCHASE, roomId));
+        for (String email : List.of("b@n.com", "c@n.com")) {
+            login(email);
+            fridgeService.joinFridge(inviteCode);
+            chatService.addParticipantToPurchaseChat(roomId);
+        }
+
+        // b만 방을 보고 있다 → 알림은 c에게만
+        chatPresence.subscribe(new HashMap<>(), "s-b", "sub-0", ChatRoomType.PURCHASE, roomId, "b@n.com");
+        ChatMessageEmailDto result = chatService.saveMessageWithEmails(chatService.saveMessage(
+                roomId, ChatRoomType.PURCHASE, "a@n.com", ChatMessageDto.builder().message("안녕").build()));
+
+        assertThat(result.receiverEmailList()).containsExactly("c@n.com");
     }
 
     private SessionDisconnectEvent disconnectEvent(String sessionId, Map<String, Object> sessionAttributes) {

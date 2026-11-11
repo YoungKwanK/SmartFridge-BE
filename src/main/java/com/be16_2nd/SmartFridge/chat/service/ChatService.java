@@ -56,6 +56,7 @@ public class ChatService {
     private final PostRepository postRepository;
     private final PostImageService postImageService;
     private final ApplicationEventPublisher eventPublisher;
+    private final ChatImageCleanup chatImageCleanup;
 
     // 메시지 저장 (1대1 / 공동구매 공통)
     // senderEmail 은 인증된 세션 사용자여야 한다 (클라이언트가 보낸 값 사용 금지)
@@ -98,12 +99,15 @@ public class ChatService {
         }
     }
 
-    // 알림 받을 사람 = 보낸 사람을 제외한 참여자
+    // 알림 받을 사람 = 보낸 사람과 지금 채팅방을 보고 있는 참여자를 제외한 참여자
+    // (보고 있는 사람은 메시지를 바로 받고 읽음 처리되므로 알림·배지가 필요 없다)
     public ChatMessageEmailDto saveMessageWithEmails(ChatMessage chatMessage) {
         String senderEmail = chatMessage.getSender().getEmail();
-        List<String> receiverEmails = chatMessage.getChatRoom().getParticipants().stream()
+        ChatRoom chatRoom = chatMessage.getChatRoom();
+        Set<String> online = chatPresence.onlineEmails(chatRoom.getType(), chatRoom.getId());
+        List<String> receiverEmails = chatRoom.getParticipants().stream()
                 .map(p -> p.getMember().getEmail())
-                .filter(email -> !email.equals(senderEmail))
+                .filter(email -> !email.equals(senderEmail) && !online.contains(email))
                 .toList();
         return new ChatMessageEmailDto(chatMessage, senderEmail, receiverEmails);
     }
@@ -297,6 +301,7 @@ public class ChatService {
                 post.getImages().forEach(image -> postImageService.deleteImage(image.getImageUrl()));
                 postRepository.delete(post);
             }
+            chatImageCleanup.beforeRoomDeleted(chatRoom.getId());
             chatRoom.getFridge().getChatRooms().remove(chatRoom);
             chatRoomRepository.delete(chatRoom);
         } else {
