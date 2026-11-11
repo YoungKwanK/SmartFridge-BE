@@ -4,6 +4,7 @@ import com.be16_2nd.SmartFridge.chat.domain.ChatMessage;
 import com.be16_2nd.SmartFridge.chat.domain.ChatRoom;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -15,6 +16,9 @@ import java.util.UUID;
 
 @Repository
 public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
+    // 채팅 내역: 보낸 사람은 함께 조회하고, 이미지는 ChatMessage.chatMessageImages 의 @BatchSize 로 한 번에 조회한다
+    // (컬렉션 fetch join 은 페이징을 메모리에서 하게 되므로 쓰지 않는다)
+    @EntityGraph(attributePaths = "sender")
     Page<ChatMessage> findByChatRoom(ChatRoom chatRoom, Pageable pageable);
 
     // 읽음 커서 이후에 온, 내가 보내지 않은 메시지 수
