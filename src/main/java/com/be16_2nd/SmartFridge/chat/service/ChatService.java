@@ -64,6 +64,7 @@ public class ChatService {
         Member sender = chatRoomParticipantValidator.validateParticipant(senderEmail, roomId, chatRoomType).getMember();
 
         List<String> imageUrls = Optional.ofNullable(chatMessageDto.getImageUrls()).orElse(List.of());
+        validateContents(chatMessageDto.getMessage(), imageUrls);
         // 이 채팅방에 업로드된 이미지만 허용 (외부 URL 끼워 넣기 차단)
         chatImageService.validateImageUrls(chatRoomType, roomId, imageUrls);
         ChatMessage chatMessage = ChatMessage.builder()
@@ -85,6 +86,16 @@ public class ChatService {
             }
         }
         return chatMessage;
+    }
+
+    // 글도 이미지도 없는 빈 메시지, 너무 긴 메시지는 거부
+    private static void validateContents(String contents, List<String> imageUrls) {
+        if ((contents == null || contents.isBlank()) && imageUrls.isEmpty()) {
+            throw new IllegalArgumentException("빈 메시지는 보낼 수 없습니다.");
+        }
+        if (contents != null && contents.length() > ChatMessage.MAX_CONTENTS_LENGTH) {
+            throw new IllegalArgumentException("메시지는 " + ChatMessage.MAX_CONTENTS_LENGTH + "자까지 보낼 수 있습니다.");
+        }
     }
 
     // 알림 받을 사람 = 보낸 사람을 제외한 참여자

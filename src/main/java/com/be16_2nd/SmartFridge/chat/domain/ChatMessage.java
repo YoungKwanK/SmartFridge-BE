@@ -20,6 +20,9 @@ import java.util.List;
 @Entity
 @Table(indexes = @Index(name = "idx_chat_message_room_id", columnList = "chat_room_id, id"))
 public class ChatMessage {
+    // 메시지 글자 수 상한
+    public static final int MAX_CONTENTS_LENGTH = 1000;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
