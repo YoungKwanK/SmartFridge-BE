@@ -152,7 +152,7 @@ public class ChatService {
                     .roomName(post.getTitle())
                     .unReadCount(unreadCounts.getOrDefault(chatRoom.getId(), 0L))
                     .isCreator(post.getCreator().getId().equals(member.getId()))
-                    .JoinStatus(post.getJoinStatus().toString())
+                    .joinStatus(post.getJoinStatus().toString())
                     .build());
         }
         return chatListResDtos;

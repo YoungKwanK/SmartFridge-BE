@@ -48,7 +48,8 @@ public class StompController {
                     chatMessage.getChatRoom().getFridge().getId(),
                     receiverEmail,
                     notificationType.getDescription(),
-                    notificationType.name()
+                    notificationType.name(),
+                    roomId
             );
         }
     }

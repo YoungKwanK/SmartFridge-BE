@@ -1,5 +1,6 @@
 package com.be16_2nd.SmartFridge.chat.service;
 
+import java.nio.charset.StandardCharsets;
 import com.be16_2nd.SmartFridge.chat.dto.ChatMessageDto;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
@@ -29,7 +30,7 @@ public class ChatRedisPubSubService implements MessageListener {
     @Override
     public void onMessage(Message message, byte[] pattern) {
         ObjectMapper objectMapper = new ObjectMapper();
-        String payload = new String(message.getBody());
+        String payload = new String(message.getBody(), StandardCharsets.UTF_8);
         try {
             ChatMessageDto chatMessageDto = objectMapper.readValue(payload, ChatMessageDto.class);
             String destination = "/topic/chat/"+ chatMessageDto.getChatRoomType().toString()+"/"+ chatMessageDto.getRoomId();
