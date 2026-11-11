@@ -61,7 +61,12 @@ public class ChatService {
     // 메시지 저장 (1대1 / 공동구매 공통)
     // senderEmail 은 인증된 세션 사용자여야 한다 (클라이언트가 보낸 값 사용 금지)
     public ChatMessage saveMessage(Long roomId, ChatRoomType chatRoomType, String senderEmail, ChatMessageDto chatMessageDto) {
-        ChatRoom chatRoom = getRoom(roomId, chatRoomType);
+        // 방 행을 먼저 배타 잠금으로 잡아 같은 방의 메시지 저장을 한 건씩 처리한다
+        // 잠그지 않으면 메시지 INSERT(FK 확인)가 방 행에 공유 잠금을 잡고, 이어지는 last_message_at UPDATE가
+        // 배타 잠금으로 올리려다 동시에 보낸 다른 트랜잭션과 서로 기다려 교착 상태(1213)로 메시지가 사라진다
+        // (잠금이 이 트랜잭션의 첫 조회여야 이후 조회가 앞선 메시지의 읽음 커서를 본다)
+        ChatRoom chatRoom = chatRoomRepository.findByIdAndTypeForUpdate(roomId, chatRoomType)
+                .orElseThrow(() -> new EntityNotFoundException("room cannot find"));
         Member sender = chatRoomParticipantValidator.validateParticipant(senderEmail, roomId, chatRoomType).getMember();
 
         List<String> imageUrls = Optional.ofNullable(chatMessageDto.getImageUrls()).orElse(List.of());
