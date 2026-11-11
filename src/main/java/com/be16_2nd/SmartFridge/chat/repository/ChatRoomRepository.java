@@ -17,7 +17,7 @@ import java.util.Optional;
 public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
     Optional<ChatRoom> findByIdAndType(Long id, ChatRoomType type);
 
-    // 공동구매 참여 시 정원 확인을 직렬화하기 위한 비관적 잠금 (SELECT ... FOR UPDATE)
+    // 공동구매 참여(정원 확인)와 메시지 저장을 방 단위로 직렬화하기 위한 비관적 잠금 (SELECT ... FOR UPDATE)
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select r from ChatRoom r where r.id = :id and r.type = :type")
     Optional<ChatRoom> findByIdAndTypeForUpdate(@Param("id") Long id, @Param("type") ChatRoomType type);

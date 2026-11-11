@@ -11,6 +11,9 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Utilities;
+import software.amazon.awssdk.core.exception.SdkClientException;
+import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
+import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.util.Collections;
@@ -97,6 +100,43 @@ class ChatImageServiceTest {
             assertThatThrownBy(() -> service.validateImageUrls(ChatRoomType.PURCHASE, 5L, List.of(bad)))
                     .as(bad).isInstanceOf(IllegalArgumentException.class);
         }
+    }
+
+    @Test
+    void 이미지_삭제는_이_버킷의_채팅_경로_이미지만_지운다() {
+        service.deleteImages(List.of(
+                base + "purchase/chat/5/a.png",
+                base + "manager/chat/7/b.jpg",
+                base + "purchase/chat/5/a.png",                 // 중복
+                "https://evil.example.com/purchase/chat/5/c.png", // 다른 버킷
+                base + "post/d.png",                            // 채팅 이미지가 아님
+                base + "purchase/chat/../post/e.png"));
+
+        ArgumentCaptor<DeleteObjectsRequest> captor = ArgumentCaptor.forClass(DeleteObjectsRequest.class);
+        verify(s3Client).deleteObjects(captor.capture());
+        assertThat(captor.getValue().bucket()).isEqualTo("test-bucket");
+        assertThat(captor.getValue().delete().objects()).extracting(ObjectIdentifier::key)
+                .containsExactly("purchase/chat/5/a.png", "manager/chat/7/b.jpg");
+    }
+
+    @Test
+    void 이미지가_많으면_1000개씩_나눠_지우고_지울_게_없으면_호출하지_않는다() {
+        List<String> urls = java.util.stream.IntStream.range(0, ChatImageService.DELETE_BATCH_SIZE + 1)
+                .mapToObj(i -> base + "purchase/chat/5/" + i + ".png").toList();
+        service.deleteImages(urls);
+        verify(s3Client, times(2)).deleteObjects(any(DeleteObjectsRequest.class));
+
+        clearInvocations(s3Client);
+        service.deleteImages(List.of());
+        verify(s3Client, never()).deleteObjects(any(DeleteObjectsRequest.class));
+    }
+
+    @Test
+    void S3_삭제가_실패해도_예외를_던지지_않는다() {
+        when(s3Client.deleteObjects(any(DeleteObjectsRequest.class))).thenThrow(SdkClientException.create("down"));
+
+        assertThatCode(() -> service.deleteImages(List.of(base + "purchase/chat/5/a.png")))
+                .doesNotThrowAnyException();
     }
 
     private static MockMultipartFile file(String name, String contentType, byte[] content) {

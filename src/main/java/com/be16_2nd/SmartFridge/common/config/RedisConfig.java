@@ -1,6 +1,7 @@
 package com.be16_2nd.SmartFridge.common.config;
 
 import com.be16_2nd.SmartFridge.chat.service.ChatRedisPubSubService;
+import com.be16_2nd.SmartFridge.chat.service.ChatSubscriptionRevoker;
 import com.be16_2nd.SmartFridge.notification.service.NotificationSubscriber;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,6 +12,7 @@ import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.data.redis.listener.PatternTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.data.redis.listener.adapter.MessageListenerAdapter;
@@ -138,11 +140,14 @@ public class RedisConfig {
     @Bean
     public RedisMessageListenerContainer chatRedisMessageListenerContainer(
             @Qualifier("chatPubSub") RedisConnectionFactory redisConnectionFactory,
-            @Qualifier("chatPubSub")MessageListenerAdapter messageListenerAdapter)
+            @Qualifier("chatPubSub")MessageListenerAdapter messageListenerAdapter,
+            ChatSubscriptionRevoker chatSubscriptionRevoker)
     {
         RedisMessageListenerContainer container = new RedisMessageListenerContainer();
         container.setConnectionFactory(redisConnectionFactory);
         container.addMessageListener(messageListenerAdapter, new PatternTopic("chat-channel"));
+        // 채팅방에서 빠진 회원의 구독 해제 (모든 서버가 받는다)
+        container.addMessageListener(chatSubscriptionRevoker, new ChannelTopic(ChatSubscriptionRevoker.CHANNEL));
         return container;
     }
 

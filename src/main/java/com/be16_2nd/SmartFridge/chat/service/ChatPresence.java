@@ -6,9 +6,11 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -67,6 +69,22 @@ public class ChatPresence {
         return emails;
     }
 
+    // 채팅방에서 빠진 회원의 구독을 지우고 지운 구독 목록을 돌려준다 (브로커 구독 해제는 ChatSubscriptionRevoker)
+    public List<Subscription> removeSubscriptions(ChatRoomType type, Long roomId, String email) {
+        String key = key(type, roomId);
+        List<Subscription> removed = new ArrayList<>();
+        for (Map.Entry<Object, Object> entry : redisTemplate.opsForHash().entries(key).entrySet()) {
+            Subscription subscription = Subscription.parse((String) entry.getKey());
+            if (subscription != null && Objects.equals(entry.getValue(), email)) {
+                removed.add(subscription);
+            }
+        }
+        if (!removed.isEmpty()) {
+            redisTemplate.opsForHash().delete(key, removed.stream().map(Subscription::field).toArray());
+        }
+        return removed;
+    }
+
     @SuppressWarnings("unchecked")
     private static Map<String, Room> subscriptions(Map<String, Object> sessionAttributes) {
         return (Map<String, Room>) sessionAttributes.computeIfAbsent(SUBSCRIPTIONS_ATTR, k -> new ConcurrentHashMap<String, Room>());
@@ -79,6 +97,22 @@ public class ChatPresence {
     }
 
     private static String field(String sessionId, String subscriptionId) {
-        return sessionId + ":" + subscriptionId;
+        return new Subscription(sessionId, subscriptionId).field();
+    }
+
+    // 하나의 STOMP 구독 (연결 id + 구독 id). Redis field 는 "{sessionId}:{subscriptionId}"
+    public record Subscription(String sessionId, String subscriptionId) {
+        public String field() {
+            return sessionId + ":" + subscriptionId;
+        }
+
+        // 세션 id 에는 ':' 가 없으므로 첫 ':' 로 나눈다
+        public static Subscription parse(String field) {
+            int index = field == null ? -1 : field.indexOf(':');
+            if (index <= 0 || index == field.length() - 1) {
+                return null;
+            }
+            return new Subscription(field.substring(0, index), field.substring(index + 1));
+        }
     }
 }

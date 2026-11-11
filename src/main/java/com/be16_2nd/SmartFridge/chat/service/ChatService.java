@@ -19,6 +19,7 @@ import com.be16_2nd.SmartFridge.post.service.PostImageService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
@@ -54,14 +55,22 @@ public class ChatService {
     private final ChatPresence chatPresence;
     private final PostRepository postRepository;
     private final PostImageService postImageService;
+    private final ApplicationEventPublisher eventPublisher;
+    private final ChatImageCleanup chatImageCleanup;
 
     // 메시지 저장 (1대1 / 공동구매 공통)
     // senderEmail 은 인증된 세션 사용자여야 한다 (클라이언트가 보낸 값 사용 금지)
     public ChatMessage saveMessage(Long roomId, ChatRoomType chatRoomType, String senderEmail, ChatMessageDto chatMessageDto) {
-        ChatRoom chatRoom = getRoom(roomId, chatRoomType);
+        // 방 행을 먼저 배타 잠금으로 잡아 같은 방의 메시지 저장을 한 건씩 처리한다
+        // 잠그지 않으면 메시지 INSERT(FK 확인)가 방 행에 공유 잠금을 잡고, 이어지는 last_message_at UPDATE가
+        // 배타 잠금으로 올리려다 동시에 보낸 다른 트랜잭션과 서로 기다려 교착 상태(1213)로 메시지가 사라진다
+        // (잠금이 이 트랜잭션의 첫 조회여야 이후 조회가 앞선 메시지의 읽음 커서를 본다)
+        ChatRoom chatRoom = chatRoomRepository.findByIdAndTypeForUpdate(roomId, chatRoomType)
+                .orElseThrow(() -> new EntityNotFoundException("room cannot find"));
         Member sender = chatRoomParticipantValidator.validateParticipant(senderEmail, roomId, chatRoomType).getMember();
 
         List<String> imageUrls = Optional.ofNullable(chatMessageDto.getImageUrls()).orElse(List.of());
+        validateContents(chatMessageDto.getMessage(), imageUrls);
         // 이 채팅방에 업로드된 이미지만 허용 (외부 URL 끼워 넣기 차단)
         chatImageService.validateImageUrls(chatRoomType, roomId, imageUrls);
         ChatMessage chatMessage = ChatMessage.builder()
@@ -85,12 +94,25 @@ public class ChatService {
         return chatMessage;
     }
 
-    // 알림 받을 사람 = 보낸 사람을 제외한 참여자
+    // 글도 이미지도 없는 빈 메시지, 너무 긴 메시지는 거부
+    private static void validateContents(String contents, List<String> imageUrls) {
+        if ((contents == null || contents.isBlank()) && imageUrls.isEmpty()) {
+            throw new IllegalArgumentException("빈 메시지는 보낼 수 없습니다.");
+        }
+        if (contents != null && contents.length() > ChatMessage.MAX_CONTENTS_LENGTH) {
+            throw new IllegalArgumentException("메시지는 " + ChatMessage.MAX_CONTENTS_LENGTH + "자까지 보낼 수 있습니다.");
+        }
+    }
+
+    // 알림 받을 사람 = 보낸 사람과 지금 채팅방을 보고 있는 참여자를 제외한 참여자
+    // (보고 있는 사람은 메시지를 바로 받고 읽음 처리되므로 알림·배지가 필요 없다)
     public ChatMessageEmailDto saveMessageWithEmails(ChatMessage chatMessage) {
         String senderEmail = chatMessage.getSender().getEmail();
-        List<String> receiverEmails = chatMessage.getChatRoom().getParticipants().stream()
+        ChatRoom chatRoom = chatMessage.getChatRoom();
+        Set<String> online = chatPresence.onlineEmails(chatRoom.getType(), chatRoom.getId());
+        List<String> receiverEmails = chatRoom.getParticipants().stream()
                 .map(p -> p.getMember().getEmail())
-                .filter(email -> !email.equals(senderEmail))
+                .filter(email -> !email.equals(senderEmail) && !online.contains(email))
                 .toList();
         return new ChatMessageEmailDto(chatMessage, senderEmail, receiverEmails);
     }
@@ -130,7 +152,7 @@ public class ChatService {
                     .roomName(post.getTitle())
                     .unReadCount(unreadCounts.getOrDefault(chatRoom.getId(), 0L))
                     .isCreator(post.getCreator().getId().equals(member.getId()))
-                    .JoinStatus(post.getJoinStatus().toString())
+                    .joinStatus(post.getJoinStatus().toString())
                     .build());
         }
         return chatListResDtos;
@@ -273,6 +295,7 @@ public class ChatService {
     }
 
     // 방장이 나가면 채팅방과 게시판 공동구매 글을 삭제(하드), 아니면 참여자만 제거
+    // (방이 삭제되면 그 방으로는 메시지를 보낼 수 없으므로 구독은 따로 끊지 않는다)
     private void leaveRoom(ChatRoom chatRoom, ChatParticipant chatParticipant) {
         PurchasePost purchasePost = chatRoom.getPurchasePost();
         if (purchasePost.getCreator().getId().equals(chatParticipant.getMember().getId())) {
@@ -283,10 +306,14 @@ public class ChatService {
                 post.getImages().forEach(image -> postImageService.deleteImage(image.getImageUrl()));
                 postRepository.delete(post);
             }
+            chatImageCleanup.beforeRoomDeleted(chatRoom.getId());
             chatRoom.getFridge().getChatRooms().remove(chatRoom);
             chatRoomRepository.delete(chatRoom);
         } else {
             chatRoom.getParticipants().remove(chatParticipant);
+            // 이미 맺은 구독으로 이후 메시지를 받지 않도록 커밋 뒤 구독을 끊는다
+            eventPublisher.publishEvent(new ChatSubscriptionRevoked(
+                    ChatRoomType.PURCHASE, chatRoom.getId(), chatParticipant.getMember().getEmail()));
         }
     }
 

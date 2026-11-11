@@ -4,6 +4,7 @@ import com.be16_2nd.SmartFridge.chat.domain.ChatMessage;
 import com.be16_2nd.SmartFridge.chat.domain.ChatRoom;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -15,6 +16,9 @@ import java.util.UUID;
 
 @Repository
 public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
+    // 채팅 내역: 보낸 사람은 함께 조회하고, 이미지는 ChatMessage.chatMessageImages 의 @BatchSize 로 한 번에 조회한다
+    // (컬렉션 fetch join 은 페이징을 메모리에서 하게 되므로 쓰지 않는다)
+    @EntityGraph(attributePaths = "sender")
     Page<ChatMessage> findByChatRoom(ChatRoom chatRoom, Pageable pageable);
 
     // 읽음 커서 이후에 온, 내가 보내지 않은 메시지 수
@@ -32,6 +36,13 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
             "and (m.sender is null or m.sender.id <> :memberId) " +
             "group by cp.chatRoom.id")
     List<RoomCount> countUnreadByRoomIds(@Param("memberId") UUID memberId, @Param("roomIds") Collection<Long> roomIds);
+
+    // 채팅방 삭제 시 S3에서 지울 메시지 이미지 URL
+    @Query("select i.imageUrl from ChatMessageImage i where i.chatMessage.chatRoom.id = :roomId")
+    List<String> findImageUrlsByRoomId(@Param("roomId") Long roomId);
+
+    @Query("select i.imageUrl from ChatMessageImage i where i.chatMessage.chatRoom.fridge.id = :fridgeId")
+    List<String> findImageUrlsByFridgeId(@Param("fridgeId") Long fridgeId);
 
     @Query("select coalesce(max(m.id), 0) from ChatMessage m where m.chatRoom.id = :roomId")
     Long findLastMessageId(@Param("roomId") Long roomId);
