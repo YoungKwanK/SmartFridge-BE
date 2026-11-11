@@ -23,11 +23,17 @@ public class NotificationPublisher {
     }
 
     public void publish(Long fridgeId, String receiverEmail, String contents, String type) {
+        publish(fridgeId, receiverEmail, contents, type, null);
+    }
+
+    // 채팅 알림: 어느 방의 메시지인지 함께 보낸다
+    public void publish(Long fridgeId, String receiverEmail, String contents, String type, Long roomId) {
         SseMessageDTO sseMessageDTO = SseMessageDTO.builder()
                 .type(type)
                 .fridgeId(fridgeId)
                 .receiverEmail(receiverEmail)
                 .contents(contents)
+                .roomId(roomId)
                 .build();
 
         String data;
