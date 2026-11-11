@@ -78,6 +78,22 @@ public class FoodController {
                 HttpStatus.OK);
     }
 
+    // 다 먹었어요 / 버렸어요: 기록을 남기고 식품을 뺀다. 예: { "result": "소비" }
+    @PostMapping("/finish/{foodId}")
+    public ResponseEntity<?> finishFood(@PathVariable("fridgeId") Long fridgeId,
+                                        @PathVariable("foodId") Long foodId,
+                                        @RequestBody @Valid FoodFinishDto foodFinishDto) {
+        foodService.finishFood(fridgeId, foodId, foodFinishDto);
+        return new ResponseEntity<>(
+                CommonDto.builder()
+                        .result("SUCCESS")
+                        .status_code(HttpStatus.OK.value())
+                        .status_message("식품 처리 완료")
+                        .build(),
+                HttpStatus.OK);
+    }
+
+    // 잘못 등록했어요: 기록 없이 삭제
     @DeleteMapping("/delete/{foodId}")
     public ResponseEntity<?> deleteFood(@PathVariable("fridgeId") Long fridgeId,
                                         @PathVariable("foodId") Long foodId) {
