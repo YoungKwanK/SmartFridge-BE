@@ -2,6 +2,7 @@ package com.be16_2nd.SmartFridge.chat.domain;
 
 import com.be16_2nd.SmartFridge.member.domain.Member;
 import jakarta.persistence.*;
+import org.hibernate.annotations.BatchSize;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -19,6 +20,9 @@ import java.util.List;
 @Entity
 @Table(indexes = @Index(name = "idx_chat_message_room_id", columnList = "chat_room_id, id"))
 public class ChatMessage {
+    // 메시지 글자 수 상한
+    public static final int MAX_CONTENTS_LENGTH = 1000;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -48,7 +52,9 @@ public class ChatMessage {
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdTime;
 
+    // 채팅 내역 한 페이지의 이미지를 메시지마다가 아니라 한 번에 조회
     @Builder.Default
+    @BatchSize(size = 100)
     @OrderBy("sortOrder ASC")
     @OneToMany(mappedBy = "chatMessage", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ChatMessageImage> chatMessageImages = new ArrayList<>();

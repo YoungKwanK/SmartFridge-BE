@@ -13,6 +13,7 @@ import com.be16_2nd.SmartFridge.fridge.domain.Type;
 import com.be16_2nd.SmartFridge.fridge.repository.FridgeMemberRepository;
 import com.be16_2nd.SmartFridge.member.domain.Member;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +38,7 @@ public class ManagerChatRoomLifecycle {
     private final ChatParticipantRepository chatParticipantRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final FridgeMemberRepository fridgeMemberRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     // 1대1 채팅방 생성
     public void createManagerChatRoom(Member member, Fridge fridge) {
@@ -81,6 +83,9 @@ public class ManagerChatRoomLifecycle {
             if (oldManager.isPresent()) {
                 inheritedCursor = oldManager.get().getLastReadMessageId();
                 chatRoom.getParticipants().remove(oldManager.get());
+                // 이전 관리자는 더 이상 이 방의 참여자가 아니므로 구독을 끊는다
+                eventPublisher.publishEvent(new ChatSubscriptionRevoked(
+                        ChatRoomType.MANAGER, chatRoom.getId(), oldManager.get().getMember().getEmail()));
             }
 
             boolean isNewManagersOwnRoom = chatRoom.getParticipants().stream()
