@@ -98,12 +98,15 @@ public class ChatService {
         }
     }
 
-    // 알림 받을 사람 = 보낸 사람을 제외한 참여자
+    // 알림 받을 사람 = 보낸 사람과 지금 채팅방을 보고 있는 참여자를 제외한 참여자
+    // (보고 있는 사람은 메시지를 바로 받고 읽음 처리되므로 알림·배지가 필요 없다)
     public ChatMessageEmailDto saveMessageWithEmails(ChatMessage chatMessage) {
         String senderEmail = chatMessage.getSender().getEmail();
-        List<String> receiverEmails = chatMessage.getChatRoom().getParticipants().stream()
+        ChatRoom chatRoom = chatMessage.getChatRoom();
+        Set<String> online = chatPresence.onlineEmails(chatRoom.getType(), chatRoom.getId());
+        List<String> receiverEmails = chatRoom.getParticipants().stream()
                 .map(p -> p.getMember().getEmail())
-                .filter(email -> !email.equals(senderEmail))
+                .filter(email -> !email.equals(senderEmail) && !online.contains(email))
                 .toList();
         return new ChatMessageEmailDto(chatMessage, senderEmail, receiverEmails);
     }
