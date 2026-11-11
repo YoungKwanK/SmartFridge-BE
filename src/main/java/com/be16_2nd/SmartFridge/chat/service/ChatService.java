@@ -19,6 +19,7 @@ import com.be16_2nd.SmartFridge.post.service.PostImageService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
@@ -54,6 +55,7 @@ public class ChatService {
     private final ChatPresence chatPresence;
     private final PostRepository postRepository;
     private final PostImageService postImageService;
+    private final ApplicationEventPublisher eventPublisher;
 
     // 메시지 저장 (1대1 / 공동구매 공통)
     // senderEmail 은 인증된 세션 사용자여야 한다 (클라이언트가 보낸 값 사용 금지)
@@ -273,6 +275,7 @@ public class ChatService {
     }
 
     // 방장이 나가면 채팅방과 게시판 공동구매 글을 삭제(하드), 아니면 참여자만 제거
+    // (방이 삭제되면 그 방으로는 메시지를 보낼 수 없으므로 구독은 따로 끊지 않는다)
     private void leaveRoom(ChatRoom chatRoom, ChatParticipant chatParticipant) {
         PurchasePost purchasePost = chatRoom.getPurchasePost();
         if (purchasePost.getCreator().getId().equals(chatParticipant.getMember().getId())) {
@@ -287,6 +290,9 @@ public class ChatService {
             chatRoomRepository.delete(chatRoom);
         } else {
             chatRoom.getParticipants().remove(chatParticipant);
+            // 이미 맺은 구독으로 이후 메시지를 받지 않도록 커밋 뒤 구독을 끊는다
+            eventPublisher.publishEvent(new ChatSubscriptionRevoked(
+                    ChatRoomType.PURCHASE, chatRoom.getId(), chatParticipant.getMember().getEmail()));
         }
     }
 
