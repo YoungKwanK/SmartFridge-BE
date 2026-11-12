@@ -13,9 +13,6 @@ import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.access.AccessDeniedException;
@@ -58,18 +55,16 @@ public class FoodService {
     }
 
     @Transactional(readOnly = true)
-    public Page<FoodResDto> getFoodsByRole(Long fridgeId, Pageable pageable, FoodSearchDto foodSearchDto, Boolean isShared) {
+    // 페이징 없이 조건에 맞는 식품을 유통기한이 가까운 순서로 전부 돌려준다 (카테고리, 보관방식 등은 화면에서 거름)
+    public List<FoodResDto> getFoodsByRole(Long fridgeId, FoodSearchDto foodSearchDto, Boolean isShared) {
         FridgeAccessValidator.FridgeContext context = fridgeAccessValidator.validate(fridgeId);
 
         Specification<Food> specification = createFoodSpecification(fridgeId, context.type(), context.member(), isShared, foodSearchDto);
 
-        Pageable sortedPageable = PageRequest.of(
-                pageable.getPageNumber(),
-                pageable.getPageSize(),
-                Sort.by(Sort.Direction.ASC, "expirationDateTime"));
-
-
-        return foodRepository.findAll(specification, sortedPageable).map(FoodResDto::fromEntity);
+        return foodRepository.findAll(specification, Sort.by(Sort.Direction.ASC, "expirationDateTime"))
+                .stream()
+                .map(FoodResDto::fromEntity)
+                .toList();
     }
 
 

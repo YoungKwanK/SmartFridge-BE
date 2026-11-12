@@ -3,8 +3,7 @@ package com.be16_2nd.SmartFridge.food.repository;
 import com.be16_2nd.SmartFridge.food.domain.Food;
 import com.be16_2nd.SmartFridge.fridge.domain.Fridge;
 import com.be16_2nd.SmartFridge.member.domain.Member;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -19,7 +18,8 @@ import java.util.UUID;
 
 @Repository
 public interface FoodRepository extends JpaRepository<Food, Long> {
-    Page<Food> findAll(Specification<Food> specification, Pageable pageable);
+    // 냉장고 하나의 식품은 많아야 수백 개라 페이징 없이 전부 조회한다
+    List<Food> findAll(Specification<Food> specification, Sort sort);
 
     // 멤버가 냉장고를 떠날 때(나가기, 강퇴) 그 멤버의 식품을 삭제하지 않고 등록자 없음 + 공유 식품으로 남김
     // 엔티티 목록(member.getFoods())을 거치지 않고 DB를 바로 바꾸므로 Member의 orphanRemoval로 삭제되지 않음
