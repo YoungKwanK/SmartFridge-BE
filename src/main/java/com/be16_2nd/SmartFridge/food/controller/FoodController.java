@@ -5,8 +5,6 @@ import com.be16_2nd.SmartFridge.food.dto.*;
 import com.be16_2nd.SmartFridge.food.service.FoodService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -35,10 +33,9 @@ public class FoodController {
 
     @GetMapping("/list")
     public ResponseEntity<?> foodList(@PathVariable("fridgeId") Long fridgeId,
-                                         Pageable pageable,
                                          @ModelAttribute FoodSearchDto foodSearchDto,
                                          @RequestParam(required = false) Boolean isShared) {
-        Page<FoodResDto> foodResDtoList = foodService.getFoodsByRole(fridgeId, pageable, foodSearchDto, isShared);
+        List<FoodResDto> foodResDtoList = foodService.getFoodsByRole(fridgeId, foodSearchDto, isShared);
         return new ResponseEntity<>(
                 CommonDto.builder()
                         .result(foodResDtoList)
@@ -50,10 +47,9 @@ public class FoodController {
 
     @GetMapping("/mylist")
     public ResponseEntity<?> myFoodList(@PathVariable("fridgeId") Long fridgeId,
-                                           Pageable pageable,
                                            @ModelAttribute FoodSearchDto foodSearchDto,
                                            @RequestParam(required = false) Boolean isShared) {
-        Page<FoodResDto> foodResDtoList = foodService.getFoodsByRole(fridgeId, pageable, foodSearchDto, isShared);
+        List<FoodResDto> foodResDtoList = foodService.getFoodsByRole(fridgeId, foodSearchDto, isShared);
 
         return new ResponseEntity<>(
                 CommonDto.builder()
