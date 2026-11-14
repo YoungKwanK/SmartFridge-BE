@@ -45,6 +45,9 @@ public class FoodService {
             throw new IllegalArgumentException("식품은 한 번에 최대 " + MAX_REGISTER_COUNT + "개까지 등록할 수 있습니다.");
         }
 
+        // 등록은 목록으로 받아 @Valid가 적용되지 않으므로 여기서 확인한다
+        foodCreateDtoList.forEach(dto -> validateQuantity(dto.getQuantity()));
+
         FridgeAccessValidator.FridgeContext context = fridgeAccessValidator.validate(fridgeId);
         List<Food> foods = foodCreateDtoList.stream()
                 .map(dto -> dto.toEntity(context.member(), context.fridge()))
@@ -68,11 +71,30 @@ public class FoodService {
     }
 
 
+    /**
+     * 식품 정보를 고친다. 수량을 줄이면서 줄어든 만큼을 먹었는지 버렸는지(reducedResult) 알려 주면
+     * 그 수량만큼 기록을 남긴다. reducedResult를 비우면 잘못 입력한 수량을 고치는 것으로 보고 기록하지 않는다.
+     */
     public FoodResDto updateFood(Long fridgeId, Long foodId, FoodUpdateDto foodUpdateDto) {
+        validateQuantity(foodUpdateDto.getQuantity());
         FridgeAccessValidator.FridgeContext context = fridgeAccessValidator.validate(fridgeId);
         Food food = findHandleableFood(context, fridgeId, foodId);
+
+        int reducedQuantity = food.getQuantity() - foodUpdateDto.getQuantity();
         Food updatedFood = food.updateFood(foodUpdateDto);
+
+        if (reducedQuantity > 0 && foodUpdateDto.getReducedResult() != null) {
+            foodHistoryRepository.save(
+                    FoodHistory.of(updatedFood, foodUpdateDto.getReducedResult(), reducedQuantity, LocalDateTime.now()));
+        }
         return FoodResDto.fromEntity(updatedFood);
+    }
+
+    // 수량이 0개 이하인 식품은 두지 않는다. 다 먹었거나 버렸다면 정리하기(finish)로 뺀다.
+    private void validateQuantity(Integer quantity) {
+        if (quantity == null || quantity < 1) {
+            throw new IllegalArgumentException("수량은 1개 이상이어야 해요. 다 먹었거나 버렸다면 정리하기를 이용해 주세요.");
+        }
     }
 
     // 잘못 등록한 식품을 지울 때 사용. 기록을 남기지 않는다.

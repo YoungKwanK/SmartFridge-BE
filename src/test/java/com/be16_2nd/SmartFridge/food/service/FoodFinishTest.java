@@ -171,7 +171,8 @@ class FoodFinishTest {
         Food food = food(10L, other, false, fridge);
         loginAs(Type.COMMON, food);
 
-        assertThatThrownBy(() -> foodService.updateFood(fridgeId, 10L, new FoodUpdateDto()))
+        FoodUpdateDto dto = FoodUpdateDto.builder().name("바꾼 이름").quantity(1).build();
+        assertThatThrownBy(() -> foodService.updateFood(fridgeId, 10L, dto))
                 .isInstanceOf(AccessDeniedException.class);
         assertThat(food.getName()).isEqualTo("우유");
     }
