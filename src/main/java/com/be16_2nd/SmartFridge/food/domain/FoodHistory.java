@@ -63,14 +63,20 @@ public class FoodHistory {
     @Column(name = "ended_at", nullable = false)
     private LocalDateTime endedAt;
 
+    // 식품을 통째로 정리할 때: 남은 수량 전부를 기록한다
     public static FoodHistory of(Food food, FoodResult result, LocalDateTime endedAt) {
+        return of(food, result, food.getQuantity(), endedAt);
+    }
+
+    // 수량 일부만 먹거나 버렸을 때: 줄어든 수량만 기록한다
+    public static FoodHistory of(Food food, FoodResult result, int quantity, LocalDateTime endedAt) {
         return FoodHistory.builder()
                 .fridgeId(food.getFridge().getId())
                 .memberId(food.getMember() == null ? null : food.getMember().getId())
                 .name(food.getName())
                 .category(food.getCategory())
                 .storageType(food.getStorageType())
-                .quantity(food.getQuantity())
+                .quantity(quantity)
                 .isShared(food.getIsShared())
                 .storageStartDate(food.getStorageStartDate())
                 .expirationDateTime(food.getExpirationDateTime())

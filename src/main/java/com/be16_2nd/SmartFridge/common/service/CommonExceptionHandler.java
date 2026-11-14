@@ -4,6 +4,7 @@ import com.be16_2nd.SmartFridge.common.dto.CommonErrorDto;
 import com.be16_2nd.SmartFridge.inquiry.exception.InquiryConflictException;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -60,6 +61,14 @@ public class CommonExceptionHandler {
     public ResponseEntity<?> inquiryConflictException(InquiryConflictException e){
         log.error(e.getMessage());
         return new ResponseEntity<>(new CommonErrorDto(HttpStatus.CONFLICT.value(), e.getMessage()), HttpStatus.CONFLICT);
+    }
+
+    // @Version 충돌: 다른 사람이 같은 데이터를 먼저 고치거나 지웠다
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<?> optimisticLockingFailureException(OptimisticLockingFailureException e){
+        log.error(e.getMessage());
+        return new ResponseEntity<>(new CommonErrorDto(HttpStatus.CONFLICT.value(),
+                "다른 멤버가 먼저 수정하거나 정리했어요. 목록을 새로 고친 뒤 다시 시도해 주세요."), HttpStatus.CONFLICT);
     }
 
     @ExceptionHandler(Exception.class)

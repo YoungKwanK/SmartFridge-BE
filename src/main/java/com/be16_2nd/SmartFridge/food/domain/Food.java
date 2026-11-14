@@ -26,6 +26,12 @@ public class Food {
     @Column(nullable = false)
     private Integer quantity;
 
+    // 두 멤버가 같은 식품을 거의 동시에 고치거나 정리하면 나중 요청을 실패시킨다 (기록이 두 번 남거나 수량이 덮어써지지 않게)
+    // 이미 있는 식품도 0부터 시작하도록 DB 기본값을 둔다 (ddl-auto: update 로 컬럼이 추가될 때)
+    @Version
+    @Column(nullable = false, columnDefinition = "bigint default 0")
+    private long version;
+
     @Enumerated(EnumType.STRING)
     private Category category;
     @Enumerated(EnumType.STRING)
