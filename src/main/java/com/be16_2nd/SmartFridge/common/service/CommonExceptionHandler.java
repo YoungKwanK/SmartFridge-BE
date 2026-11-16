@@ -1,5 +1,6 @@
 package com.be16_2nd.SmartFridge.common.service;
 
+import com.be16_2nd.SmartFridge.common.ai.AiException;
 import com.be16_2nd.SmartFridge.common.dto.CommonErrorDto;
 import com.be16_2nd.SmartFridge.inquiry.exception.InquiryConflictException;
 import jakarta.persistence.EntityNotFoundException;
@@ -69,6 +70,13 @@ public class CommonExceptionHandler {
         log.error(e.getMessage());
         return new ResponseEntity<>(new CommonErrorDto(HttpStatus.CONFLICT.value(),
                 "다른 멤버가 먼저 수정하거나 정리했어요. 목록을 새로 고친 뒤 다시 시도해 주세요."), HttpStatus.CONFLICT);
+    }
+
+    // AI 호출 실패: 원인에 맞는 상태 코드(502/503)를 예외가 들고 있다
+    @ExceptionHandler(AiException.class)
+    public ResponseEntity<?> aiException(AiException e){
+        log.error(e.getMessage());
+        return new ResponseEntity<>(new CommonErrorDto(e.getStatus().value(), e.getMessage()), e.getStatus());
     }
 
     @ExceptionHandler(Exception.class)

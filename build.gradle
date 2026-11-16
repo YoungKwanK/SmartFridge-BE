@@ -46,6 +46,8 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-websocket'
 	implementation 'org.springframework.boot:spring-boot-starter-amqp'
 	implementation 'ognl:ognl:3.3.4'
+	// AI (Claude)
+	implementation 'com.anthropic:anthropic-java:3.3.0'
 }
 
 tasks.named('test') {
