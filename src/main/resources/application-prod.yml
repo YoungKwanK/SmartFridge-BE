@@ -46,6 +46,14 @@ cloud:
     s3:
       bucket: ${BUCKET}
 
+ai:
+  anthropic:
+    api-key: ${ANTHROPIC_API_KEY}
+    model: claude-haiku-5-5
+    max-tokens: 16000
+    timeout: 60s
+    max-retries: 2
+
 jwt:
   expirationAt: 1000
   secretKeyAt: ${AT_KEY}
