@@ -54,6 +54,13 @@ ai:
     timeout: 60s
     max-retries: 2
 
+recipe:
+  source:
+    base-url: http://openapi.foodsafetykorea.go.kr/api
+    api-key: ${FOOD_SAFETY_API_KEY}
+    page-size: 100
+    timeout: 30s
+
 jwt:
   expirationAt: 1000
   secretKeyAt: ${AT_KEY}

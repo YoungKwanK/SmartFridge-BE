@@ -102,6 +102,11 @@ spec:
             secretKeyRef:
               name: smartfridge-secrets
               key: ADMIN_PASSWORD
+        - name: FOOD_SAFETY_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: smartfridge-secrets
+              key: FOOD_SAFETY_API_KEY
         readinessProbe:
           httpGet:
             path: /health
