@@ -103,6 +103,20 @@ public class FoodController {
                 HttpStatus.OK);
     }
 
+    // 여러 식품을 한 번에 다 먹었어요 / 버렸어요 (최대 50개). 예: { "foodIds": [3, 7], "result": "폐기" }
+    @PostMapping("/finish")
+    public ResponseEntity<?> finishFoods(@PathVariable("fridgeId") Long fridgeId,
+                                         @RequestBody @Valid FoodBulkFinishDto foodBulkFinishDto) {
+        FoodBulkResDto result = foodService.finishFoods(fridgeId, foodBulkFinishDto);
+        return new ResponseEntity<>(
+                CommonDto.builder()
+                        .result(result)
+                        .status_code(HttpStatus.OK.value())
+                        .status_message("식품 " + result.getCount() + "개 처리 완료")
+                        .build(),
+                HttpStatus.OK);
+    }
+
     @GetMapping("/stats")
     public ResponseEntity<?> foodStats(@PathVariable Long fridgeId) {
         FoodStatResDto stats = foodService.foodStats(fridgeId);

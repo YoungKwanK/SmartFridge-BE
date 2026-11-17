@@ -24,7 +24,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -36,6 +39,7 @@ public class FoodService {
     private final FridgeAccessValidator fridgeAccessValidator;
 
     private static final int MAX_REGISTER_COUNT = 30;
+    private static final int MAX_BULK_FINISH_COUNT = 50;
 
     public List<FoodResDto> registerFood(Long fridgeId, List<FoodCreateDto> foodCreateDtoList) {
         if (foodCreateDtoList == null || foodCreateDtoList.isEmpty()) {
@@ -117,19 +121,84 @@ public class FoodService {
     }
 
     /**
+     * 여러 식품을 한 번에 소비·폐기로 처리한다. 하나라도 처리할 수 없으면 아무것도 처리하지 않는다.
+     * 기록은 식품마다 하나씩, 단건 처리와 같은 값으로 남긴다.
+     */
+    public FoodBulkResDto finishFoods(Long fridgeId, FoodBulkFinishDto dto) {
+        if (dto == null || dto.getResult() == null) {
+            throw new IllegalArgumentException("처리 결과(소비 또는 폐기)를 선택해 주세요.");
+        }
+        List<Long> foodIds = validateBulkIds(dto.getFoodIds());
+        FridgeAccessValidator.FridgeContext context = fridgeAccessValidator.validate(fridgeId);
+        List<Food> foods = findHandleableFoods(context, fridgeId, foodIds);
+
+        LocalDateTime now = LocalDateTime.now();
+        foodHistoryRepository.saveAll(foods.stream()
+                .map(food -> FoodHistory.of(food, dto.getResult(), now))
+                .toList());
+        foodRepository.deleteAll(foods);
+        return toBulkRes(foods);
+    }
+
+    // 비어 있거나 너무 많은 요청을 막고, 같은 식품이 두 번 들어오면 한 번만 남긴다 (요청 순서 유지)
+    private List<Long> validateBulkIds(List<Long> foodIds) {
+        if (foodIds == null || foodIds.isEmpty()) {
+            throw new IllegalArgumentException("처리할 식품을 선택해 주세요.");
+        }
+        if (foodIds.stream().anyMatch(Objects::isNull)) {
+            throw new IllegalArgumentException("식품 ID가 비어 있어요.");
+        }
+        List<Long> distinctIds = foodIds.stream().distinct().toList();
+        if (distinctIds.size() > MAX_BULK_FINISH_COUNT) {
+            throw new IllegalArgumentException("식품은 한 번에 최대 " + MAX_BULK_FINISH_COUNT + "개까지 처리할 수 있어요.");
+        }
+        return distinctIds;
+    }
+
+    /**
+     * 여러 식품을 한 번에 찾고, 모두 이 냉장고에 있고 요청한 회원이 다룰 수 있는지 확인한다.
+     * 확인을 전부 마친 뒤에만 쓰기를 하도록 모든 식품에 단건과 같은 검사(checkHandleable)를 먼저 적용한다.
+     */
+    private List<Food> findHandleableFoods(FridgeAccessValidator.FridgeContext context, Long fridgeId, List<Long> foodIds) {
+        Map<Long, Food> foundById = foodRepository.findAllById(foodIds).stream()
+                .collect(Collectors.toMap(Food::getId, food -> food));
+
+        List<Long> missingIds = foodIds.stream().filter(id -> !foundById.containsKey(id)).toList();
+        if (!missingIds.isEmpty()) {
+            throw new EntityNotFoundException("식품을 찾을 수 없습니다. ID: " + missingIds);
+        }
+
+        List<Food> foods = foodIds.stream().map(foundById::get).toList();
+        foods.forEach(food -> checkHandleable(context, fridgeId, food));
+        return foods;
+    }
+
+    private FoodBulkResDto toBulkRes(List<Food> foods) {
+        return FoodBulkResDto.builder()
+                .count(foods.size())
+                .names(foods.stream().map(Food::getName).toList())
+                .build();
+    }
+
+    /**
      * 식품을 찾고, 요청한 회원이 이 식품을 수정·삭제·처리할 수 있는지 확인한다.
      * 식품 목록에 보이는 범위와 같다: 관리자는 전부, 일반 멤버는 공유식품과 자기 식품만.
      */
     private Food findHandleableFood(FridgeAccessValidator.FridgeContext context, Long fridgeId, Long foodId) {
         Food food = foodRepository.findById(foodId)
                 .orElseThrow(() -> new EntityNotFoundException("식품을 찾을 수 없습니다. ID: " + foodId));
+        checkHandleable(context, fridgeId, food);
+        return food;
+    }
+
+    // 단건·일괄 처리가 함께 쓰는 검사: 이 냉장고의 식품인지, 요청한 회원이 다룰 수 있는지
+    private void checkHandleable(FridgeAccessValidator.FridgeContext context, Long fridgeId, Food food) {
         if (!food.getFridge().getId().equals(fridgeId)) {
-            throw new IllegalArgumentException("해당 냉장고에 존재하지 않는 식품입니다.");
+            throw new IllegalArgumentException("해당 냉장고에 존재하지 않는 식품입니다. ID: " + food.getId());
         }
         if (!canHandle(context, food)) {
-            throw new AccessDeniedException("다른 멤버의 비공유 식품은 수정하거나 삭제할 수 없습니다.");
+            throw new AccessDeniedException("다른 멤버의 비공유 식품은 수정하거나 삭제할 수 없습니다: " + food.getName());
         }
-        return food;
     }
 
     private boolean canHandle(FridgeAccessValidator.FridgeContext context, Food food) {
