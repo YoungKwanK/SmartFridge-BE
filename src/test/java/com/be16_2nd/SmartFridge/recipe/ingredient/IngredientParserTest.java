@@ -79,6 +79,62 @@ class IngredientParserTest {
     }
 
     @Test
+    void 분량이_괄호_안에만_있으면_괄호를_벗긴다() {
+        // 실제 데이터 1121번 "감자주스"
+        List<ParsedIngredient> result = IngredientParser.parse("감자(400g), 우유(200g), 설탕(10g), 다진 마늘(10g), 삼색분말(각 10g)");
+
+        assertThat(result).containsExactly(
+                new ParsedIngredient("감자", "400g"),
+                new ParsedIngredient("우유", "200g"),
+                new ParsedIngredient("설탕", "10g"),
+                new ParsedIngredient("마늘", "10g"),
+                new ParsedIngredient("삼색분말", "각 10g"));
+    }
+
+    @Test
+    void 분량_뒤에_붙은_괄호와_이름의_괄호_설명은_그대로_다룬다() {
+        List<ParsedIngredient> result = IngredientParser.parse("연두부 75g(3/4모), 두부(부침용) 100g, 돼지고기(앞다리살 100g)");
+
+        assertThat(result).containsExactly(
+                new ParsedIngredient("연두부", "75g(3/4모)"),
+                new ParsedIngredient("두부", "100g"),
+                new ParsedIngredient("돼지고기", "앞다리살 100g"));
+    }
+
+    @Test
+    void 줄_중간의_소스소개_라벨은_앞_재료를_버리지_않는다() {
+        // 실제 데이터 724번 "쇠고기 채소볶음" (원본은 한 줄)
+        List<ParsedIngredient> result = IngredientParser.parse(
+                "쇠고기 40g, 생표고버섯 16g, 정종 2g, 식용유 9g [소스소개]쇠고기밑간양념:전분 2g, 달걀 2g");
+
+        assertThat(result).extracting(ParsedIngredient::name)
+                .containsExactly("쇠고기", "생표고버섯", "정종", "식용유", "전분", "달걀");
+        assertThat(result).extracting(ParsedIngredient::amount)
+                .containsExactly("40g", "16g", "2g", "9g", "2g", "2g");
+    }
+
+    @Test
+    void 닫히지_않은_태그와_분량_뒤_라벨과_br_줄바꿈을_처리한다() {
+        // 실제 데이터 1022번, 986번, 706번
+        List<ParsedIngredient> result = IngredientParser.parse(
+                "감자 40g, 오이 10g [소스소개 단촛물 : 물60g, 식초 1.5g\n"
+                        + "달걀 12g, 토마토 120g  토마토소스 : 셀러리 8g\n"
+                        + "배 12g [소스소개] 고기재움장 : 포도주 2.5g<br />후춧가루 0.1g");
+
+        assertThat(result).extracting(ParsedIngredient::name)
+                .containsExactly("감자", "오이", "물", "식초", "달걀", "토마토", "셀러리", "배", "포도주", "후춧가루");
+    }
+
+    @Test
+    void 괄호_안의_콜론은_라벨로_보지_않는다() {
+        List<ParsedIngredient> result = IngredientParser.parse("소스 : 간장(1:2 희석) 10g, 식초 5g");
+
+        assertThat(result).containsExactly(
+                new ParsedIngredient("간장", "10g"),
+                new ParsedIngredient("식초", "5g"));
+    }
+
+    @Test
     void 분량이_너무_길면_자르고_이름이_너무_길면_버린다() {
         ParsedIngredient longAmount = IngredientParser.parseItem("소금 1" + "가".repeat(200));
         ParsedIngredient longName = IngredientParser.parseItem("가".repeat(40) + " 10g");
