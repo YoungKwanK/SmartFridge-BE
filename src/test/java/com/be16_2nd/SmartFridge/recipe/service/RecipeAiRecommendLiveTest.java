@@ -43,6 +43,12 @@ class RecipeAiRecommendLiveTest {
         assertThat(result.aiRanked()).isTrue();
         assertThat(result.recipes()).hasSize(3);
         assertThat(result.recipes().get(0).reason()).isNotBlank();
+        // 부족한 재료가 있는 레시피에 "살 재료가 없다"는 이유를 붙이면 안 된다
+        result.recipes().stream()
+                .filter(item -> !item.recipe().missingIngredients().isEmpty() && item.reason() != null)
+                .forEach(item -> assertThat(item.reason())
+                        .as("%s 의 이유가 부족한 재료와 맞지 않음", item.recipe().name())
+                        .doesNotContain("살 재료 없", "살 재료가 없", "재료 없이", "바로 만들"));
     }
 
     private static RecipeRecommendResDto recipe(Long id, String name, String dishType, List<String> matched,

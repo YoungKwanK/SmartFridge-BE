@@ -79,8 +79,8 @@ class RecipeAiRecommendServiceTest {
         assertThat(sent.system()).isEqualTo(RecipeAiRecommendService.SYSTEM_PROMPT);
         assertThat(sent.effort()).isEqualTo(AiEffort.LOW);
         assertThat(sent.user())
-                .contains("id=100 | name=계란찜", "missing=두부")
-                .contains("id=101 | name=두부찌개", "expiring=두부")
+                .contains("id=100 | name=계란찜", "missingCount=1 | missing=두부")
+                .contains("id=101 | name=두부찌개", "expiring=두부", "missingCount=0 | missing=-")
                 // 후보가 기본 개수(5)보다 적으면 후보 수만큼만 고르라고 한다
                 .contains("2개를 골라 주세요");
     }
