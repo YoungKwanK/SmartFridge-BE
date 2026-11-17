@@ -1,6 +1,7 @@
 package com.be16_2nd.SmartFridge.recipe.ingredient;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -16,6 +17,8 @@ import java.util.regex.Pattern;
  *
  * - "고명", "●양념장 :", 요리 이름처럼 분량도 쉼표도 없는 줄은 제목으로 보고 건너뛴다
  * - "다진 ", "채 썬 " 같은 손질 방법은 떼어낸다 (별칭은 {@link IngredientDictionary} 가 맡는다)
+ * - "양념장 :" 같은 라벨은 재료 단위로 뗀다. 줄 중간의 "[소스소개]" 태그는 구분자, "&lt;br /&gt;"는 줄바꿈으로 본다
+ * - "감자(400g)"처럼 분량이 괄호 안에만 있으면 괄호를 벗겨 분량으로 쓴다
  */
 public final class IngredientParser {
 
@@ -25,6 +28,9 @@ public final class IngredientParser {
     private static final Pattern LEADING_BRACKETS = Pattern.compile("^(\\s*\\[[^\\]]*\\])+");
     private static final Pattern LEADING_BULLETS = Pattern.compile("^[\\s·●•○◎▶■□◆◇※*\\-]+");
     private static final Pattern PARENTHESES = Pattern.compile("\\([^)]*\\)?");
+    // 줄 중간의 "[소스소개]", 닫히지 않은 "[소스소개 단촛물 :" 의 여는 괄호
+    private static final Pattern MID_BRACKET = Pattern.compile("\\[[^\\]]*\\]|\\[");
+    private static final Pattern HTML_LINE_BREAK = Pattern.compile("<br\\s*/?>", Pattern.CASE_INSENSITIVE);
 
     static final int MAX_NAME_LENGTH = 30;
     static final int MAX_AMOUNT_LENGTH = 100;
@@ -42,23 +48,55 @@ public final class IngredientParser {
         if (text == null || text.isBlank()) {
             return result;
         }
-        for (String rawLine : text.split("\\R")) {
-            String line = stripLineHead(rawLine);
-            int colon = indexOfColon(line);
-            if (colon >= 0) {
-                line = line.substring(colon + 1).strip();   // "양념장 : 간장 1큰술" → "간장 1큰술"
-            }
+        for (String rawLine : HTML_LINE_BREAK.matcher(text).replaceAll("\n").split("\\R")) {
+            // 줄 중간의 "[소스소개]" 같은 태그는 앞뒤 재료를 나누는 구분자로 본다
+            String line = MID_BRACKET.matcher(stripLineHead(rawLine)).replaceAll(",").strip();
             if (line.isEmpty() || isTitle(line)) {
                 continue;
             }
             for (String item : splitOutsideParentheses(line)) {
-                ParsedIngredient parsed = parseItem(item);
-                if (parsed != null) {
-                    result.add(parsed);
+                for (String part : stripLabels(item)) {
+                    ParsedIngredient parsed = parseItem(part);
+                    if (parsed != null) {
+                        result.add(parsed);
+                    }
                 }
             }
         }
         return result;
+    }
+
+    /**
+     * 재료 하나에 붙은 "라벨 :"을 뗀다. 콜론을 줄 단위로 처리하면 줄 중간에 라벨이 올 때 앞의 재료까지 버려지므로 재료 단위로 본다.
+     * <pre>
+     * "양념장 : 간장 1큰술"           → "간장 1큰술"
+     * "토마토 120g  토마토소스 : 셀러리 8g" → "토마토 120g", "셀러리 8g"  (라벨 앞에 분량까지 있는 재료는 남긴다)
+     * </pre>
+     */
+    static List<String> stripLabels(String item) {
+        List<String> parts = new ArrayList<>();
+        String rest = item;
+        int colon;
+        while ((colon = indexOfColonOutsideParentheses(rest)) >= 0) {
+            String kept = ingredientBeforeLabel(rest.substring(0, colon));
+            if (!kept.isEmpty()) {
+                parts.add(kept);
+            }
+            rest = rest.substring(colon + 1);
+        }
+        parts.add(rest);
+        return parts;
+    }
+
+    // 라벨 앞부분에서 마지막 분량까지를 재료로 남기고, 분량이 없으면 전부 라벨로 본다
+    private static String ingredientBeforeLabel(String beforeColon) {
+        String[] tokens = beforeColon.strip().split("\\s+");
+        for (int i = tokens.length - 1; i >= 0; i--) {
+            if (AMOUNT_START.matcher(tokens[i]).find()) {
+                return String.join(" ", Arrays.copyOfRange(tokens, 0, i + 1));
+            }
+        }
+        return "";
     }
 
     static ParsedIngredient parseItem(String item) {
@@ -70,8 +108,21 @@ public final class IngredientParser {
         String amount = null;
         Matcher m = AMOUNT_START.matcher(text);
         if (m.find()) {
-            namePart = text.substring(0, m.start());
-            amount = text.substring(m.start()).strip();
+            int start = m.start();
+            int open = text.lastIndexOf('(', start);
+            int close = open >= 0 && isUnclosed(text.substring(0, start)) ? closingIndex(text, open) : -1;
+            if (close >= 0 && close < text.length() - 1 && m.find(close + 1)) {
+                // "간장(1:2 희석) 10g": 괄호 안 숫자는 설명이고 괄호 뒤에 진짜 분량이 있다
+                start = m.start();
+            }
+            if (close == text.length() - 1) {
+                // "감자(400g)": 분량이 이름 뒤 괄호 하나에만 있으면 괄호를 벗겨 분량으로 쓴다
+                namePart = text.substring(0, open);
+                amount = text.substring(open + 1, close).strip();
+            } else {
+                namePart = text.substring(0, start);
+                amount = text.substring(start).strip();
+            }
         }
         // "두부(부침용) 100g" → "두부", "돼지고기(앞다리살 100g)" → "돼지고기"
         String name = PARENTHESES.matcher(namePart).replaceAll(" ");
@@ -106,12 +157,36 @@ public final class IngredientParser {
         return LEADING_BULLETS.matcher(result).replaceFirst("").strip();
     }
 
-    private static int indexOfColon(String line) {
-        int half = line.indexOf(':');
-        int full = line.indexOf('：');
-        if (half < 0) return full;
-        if (full < 0) return half;
-        return Math.min(half, full);
+    // 괄호 안의 콜론("비율(1:2)")은 라벨이 아니다
+    private static int indexOfColonOutsideParentheses(String text) {
+        int depth = 0;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '(') depth++;
+            if (c == ')' && depth > 0) depth--;
+            if ((c == ':' || c == '：') && depth == 0) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    // 여는 괄호가 닫는 괄호보다 많다 = 괄호 안에서 끝났다
+    private static boolean isUnclosed(String text) {
+        return text.chars().filter(c -> c == '(').count() > text.chars().filter(c -> c == ')').count();
+    }
+
+    // open 위치의 여는 괄호와 짝이 맞는 닫는 괄호 위치, 닫히지 않으면 -1
+    private static int closingIndex(String text, int open) {
+        int depth = 0;
+        for (int i = open; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '(') depth++;
+            if (c == ')' && --depth == 0) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     // 쉼표도 분량도 없는 줄 = "고명", "북엇국" 같은 제목
