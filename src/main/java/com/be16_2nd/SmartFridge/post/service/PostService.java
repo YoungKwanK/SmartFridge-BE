@@ -39,6 +39,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -206,7 +208,7 @@ public class PostService {
 
     @Transactional(readOnly = true)
     public Page<PostResDto> findByPosts(Long fridgeId, Pageable pageable, PostSearchDto postSearchDto, String categoryName) {
-        fridgeAccessValidator.validate(fridgeId);
+        Member member = fridgeAccessValidator.validate(fridgeId).member();
 
         Specification<Post> fridgeSpec = (root, query, cb) -> cb.equal(root.get("fridge").get("id"), fridgeId);
 
@@ -232,10 +234,29 @@ public class PostService {
                 Sort.by(Sort.Order.desc("pinned"), Sort.Order.desc("pinnedAt"), Sort.Order.desc("createdTime"))
         );
         Page<Post> postList = postRepository.findAll(finalSpec, sortedPageable);
+        Map<Long, PurchasePost> purchaseByPostId = findPurchasesOf(postList.getContent());
         return postList.map(post -> {
             Long viewCount = postStatsService.getViewCount(post.getId());
-            return PostResDto.fromEntity(post, viewCount);
+            PostResDto postResDto = PostResDto.fromEntity(post, viewCount);
+            PurchasePost purchasePost = purchaseByPostId.get(post.getId());
+            if (purchasePost != null) {
+                postResDto.setPurchase(PostPurchaseDto.fromEntity(purchasePost, member));
+            }
+            return postResDto;
         });
+    }
+
+    // 목록에 있는 공동구매 글의 모집 정보를 한 번에 찾는다 (글마다 따로 조회하지 않게)
+    private Map<Long, PurchasePost> findPurchasesOf(List<Post> posts) {
+        List<Long> purchasePostIds = posts.stream()
+                .filter(post -> post.getCategory() == PostCategory.공동구매)
+                .map(Post::getId)
+                .toList();
+        if (purchasePostIds.isEmpty()) {
+            return Map.of();
+        }
+        return purchasePostRepository.findByPostIdIn(purchasePostIds).stream()
+                .collect(Collectors.toMap(purchasePost -> purchasePost.getPost().getId(), Function.identity()));
     }
 
     public void addLike(Long fridgeId, Long postId) {
