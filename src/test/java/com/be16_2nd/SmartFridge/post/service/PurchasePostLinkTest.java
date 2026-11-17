@@ -13,6 +13,8 @@ import com.be16_2nd.SmartFridge.post.domain.Post;
 import com.be16_2nd.SmartFridge.post.domain.PostCategory;
 import com.be16_2nd.SmartFridge.post.dto.PostCommentCreateDto;
 import com.be16_2nd.SmartFridge.post.dto.PostCreateDto;
+import com.be16_2nd.SmartFridge.post.dto.PostPurchaseDto;
+import com.be16_2nd.SmartFridge.post.dto.PostSearchDto;
 import com.be16_2nd.SmartFridge.post.dto.PostUpdateDto;
 import com.be16_2nd.SmartFridge.post.repository.PostRepository;
 import jakarta.persistence.EntityManager;
@@ -21,6 +23,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
@@ -86,6 +89,29 @@ class PurchasePostLinkTest {
         assertThat(purchasePost.getCreator().getEmail()).isEqualTo("a@pl.com");
         assertThat(purchasePost.getChatRoom().getParticipants())
                 .extracting(p -> p.getMember().getEmail()).containsExactly("a@pl.com");
+    }
+
+    @Test
+    void 게시판_목록의_공동구매_글에는_모집_현황과_내_참여_여부가_담긴다() {
+        login("a@pl.com");
+        Long postId = createPurchasePost("우유 공구", 4);
+        Long roomId = purchasePostRepository.findByPostId(postId).orElseThrow().getChatRoom().getId();
+        login("b@pl.com");
+        chatService.addParticipantToPurchaseChat(roomId);
+        flushClear();
+
+        login("b@pl.com");
+        PostPurchaseDto joined = postService.findByPosts(fridgeId, PageRequest.of(0, 10), new PostSearchDto(), "공동구매")
+                .getContent().get(0).getPurchase();
+        login("manager@pl.com");
+        PostPurchaseDto notJoined = postService.findByPosts(fridgeId, PageRequest.of(0, 10), new PostSearchDto(), "공동구매")
+                .getContent().get(0).getPurchase();
+
+        assertThat(joined.getCurrentParticipants()).isEqualTo(2);
+        assertThat(joined.getMaxParticipants()).isEqualTo(4);
+        assertThat(joined.getJoinStatus()).isEqualTo("OPEN");
+        assertThat(joined.getIsJoined()).isTrue();
+        assertThat(notJoined.getIsJoined()).isFalse();
     }
 
     @Test

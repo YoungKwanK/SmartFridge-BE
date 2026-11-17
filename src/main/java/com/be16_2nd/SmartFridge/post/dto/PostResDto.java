@@ -21,6 +21,8 @@ public class PostResDto {
     private boolean pinned;
     private Long viewCount;
     private String timeAgo;
+    // 공동구매 글의 모집 현황 (공동구매 글이 아니거나 채팅방이 없으면 null)
+    private PostPurchaseDto purchase;
 
     public static PostResDto fromEntity(Post post,Long viewCount) {
         return PostResDto.builder()
