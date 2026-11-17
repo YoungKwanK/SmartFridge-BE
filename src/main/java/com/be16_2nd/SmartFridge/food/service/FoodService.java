@@ -140,6 +140,19 @@ public class FoodService {
         return toBulkRes(foods);
     }
 
+    /**
+     * 처리하지 않고 확인만 한다: 모두 이 냉장고에 있고 요청한 회원이 다룰 수 있는 식품인지.
+     * AI 에이전트가 제안을 만들 때 쓴다 (실행 전에 확인 카드에 보여 줄 식품 정보도 함께 돌려준다).
+     */
+    @Transactional(readOnly = true)
+    public List<FoodResDto> getHandleableFoods(Long fridgeId, List<Long> foodIds) {
+        List<Long> ids = validateBulkIds(foodIds);
+        FridgeAccessValidator.FridgeContext context = fridgeAccessValidator.validate(fridgeId);
+        return findHandleableFoods(context, fridgeId, ids).stream()
+                .map(FoodResDto::fromEntity)
+                .toList();
+    }
+
     // 비어 있거나 너무 많은 요청을 막고, 같은 식품이 두 번 들어오면 한 번만 남긴다 (요청 순서 유지)
     private List<Long> validateBulkIds(List<Long> foodIds) {
         if (foodIds == null || foodIds.isEmpty()) {
