@@ -53,6 +53,10 @@ public class RecipeAiRecommendService {
             - 한국어 존댓말 한 문장, 60자 이내
             - 후보 정보에 있는 재료 이름만 쓰고, 없는 재료나 조리법을 지어내지 않는다
             - 임박 재료가 있으면 그 재료를 먼저 언급한다 (예: "유통기한이 임박한 두부와 대파를 한 번에 쓸 수 있어요.")
+            - 이유는 그 레시피의 missingCount 와 맞아야 한다. 사용자는 이 문장을 보고 장을 볼지 정한다
+              - missingCount=0 일 때만 "더 살 재료가 없다", "바로 만들 수 있다"처럼 말할 수 있다
+              - missingCount>0 이면 그런 표현을 절대 쓰지 않는다. 부족한 재료를 이름으로 밝힌다
+                (예: "계란과 대파가 있어 햄만 더 있으면 만들 수 있어요.")
 
             recipeId 는 반드시 후보에 있는 id 만 쓰고, 같은 레시피를 두 번 고르지 않는다.
             """;
@@ -120,6 +124,7 @@ public class RecipeAiRecommendService {
                     .append(" | method=").append(nullToDash(c.cookingMethod()))
                     .append(" | owned=").append(String.join(", ", c.matchedIngredients()))
                     .append(" | expiring=").append(joinOrDash(c.expiringIngredients()))
+                    .append(" | missingCount=").append(c.missingIngredients().size())
                     .append(" | missing=").append(joinOrDash(c.missingIngredients().stream()
                             .map(RecipeRecommendResDto.MissingIngredient::name).toList()))
                     .append('\n');
