@@ -26,6 +26,9 @@ public final class IngredientParser {
     private static final Pattern LEADING_BULLETS = Pattern.compile("^[\\s·●•○◎▶■□◆◇※*\\-]+");
     private static final Pattern PARENTHESES = Pattern.compile("\\([^)]*\\)?");
 
+    static final int MAX_NAME_LENGTH = 30;
+    static final int MAX_AMOUNT_LENGTH = 100;
+
     // 이름 앞에 붙는 손질 방법 (뒤에 띄어쓰기가 있을 때만 뗀다: "다진 마늘" → "마늘", "다진마늘"은 사전 별칭으로)
     private static final List<String> MODIFIERS = List.of(
             "곱게 다진", "굵게 다진", "다진", "채 썬", "채썬", "얇게 썬", "썬", "삶은", "데친", "불린", "손질한", "손질된",
@@ -73,8 +76,12 @@ public final class IngredientParser {
         // "두부(부침용) 100g" → "두부", "돼지고기(앞다리살 100g)" → "돼지고기"
         String name = PARENTHESES.matcher(namePart).replaceAll(" ");
         name = stripModifiers(name.replaceAll("\\s+", " ").strip());
-        if (name.isEmpty()) {
+        // 원본 오타로 여러 재료가 한 덩어리가 된 경우: 이름이 이렇게 길면 재료가 아니므로 버린다
+        if (name.isEmpty() || name.length() > MAX_NAME_LENGTH) {
             return null;
+        }
+        if (amount != null && amount.length() > MAX_AMOUNT_LENGTH) {
+            amount = amount.substring(0, MAX_AMOUNT_LENGTH).strip();   // 화면 표시용이라 잘라도 된다 (DB 컬럼 100자)
         }
         return new ParsedIngredient(name, amount == null || amount.isEmpty() ? null : amount);
     }
@@ -113,6 +120,10 @@ public final class IngredientParser {
     }
 
     private static List<String> splitOutsideParentheses(String line) {
+        // "바지락(모시조개( 200g(30개), 양파 15g" 처럼 괄호 짝이 안 맞는 원본은 괄호를 믿지 않고 쉼표로만 나눈다
+        if (line.chars().filter(c -> c == '(').count() != line.chars().filter(c -> c == ')').count()) {
+            return List.of(line.split(","));
+        }
         List<String> items = new ArrayList<>();
         int depth = 0;
         StringBuilder current = new StringBuilder();
