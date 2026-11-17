@@ -3,6 +3,8 @@ package com.be16_2nd.SmartFridge.common.service;
 import com.be16_2nd.SmartFridge.common.ai.AiException;
 import com.be16_2nd.SmartFridge.common.dto.CommonErrorDto;
 import com.be16_2nd.SmartFridge.inquiry.exception.InquiryConflictException;
+import com.be16_2nd.SmartFridge.recipe.service.RecipeImportInProgressException;
+import com.be16_2nd.SmartFridge.recipe.source.RecipeSourceException;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -77,6 +79,18 @@ public class CommonExceptionHandler {
     public ResponseEntity<?> aiException(AiException e){
         log.error(e.getMessage());
         return new ResponseEntity<>(new CommonErrorDto(e.getStatus().value(), e.getMessage()), e.getStatus());
+    }
+
+    @ExceptionHandler(RecipeSourceException.class)
+    public ResponseEntity<?> recipeSourceException(RecipeSourceException e){
+        log.error(e.getMessage());
+        return new ResponseEntity<>(new CommonErrorDto(HttpStatus.BAD_GATEWAY.value(), e.getMessage()), HttpStatus.BAD_GATEWAY);
+    }
+
+    @ExceptionHandler(RecipeImportInProgressException.class)
+    public ResponseEntity<?> recipeImportInProgressException(RecipeImportInProgressException e){
+        log.error(e.getMessage());
+        return new ResponseEntity<>(new CommonErrorDto(HttpStatus.CONFLICT.value(), e.getMessage()), HttpStatus.CONFLICT);
     }
 
     @ExceptionHandler(Exception.class)
