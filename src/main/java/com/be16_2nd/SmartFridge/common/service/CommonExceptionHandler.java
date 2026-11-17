@@ -1,5 +1,6 @@
 package com.be16_2nd.SmartFridge.common.service;
 
+import com.be16_2nd.SmartFridge.agent.exception.AgentActionException;
 import com.be16_2nd.SmartFridge.common.ai.AiException;
 import com.be16_2nd.SmartFridge.common.dto.CommonErrorDto;
 import com.be16_2nd.SmartFridge.inquiry.exception.InquiryConflictException;
@@ -91,6 +92,13 @@ public class CommonExceptionHandler {
     public ResponseEntity<?> recipeImportInProgressException(RecipeImportInProgressException e){
         log.error(e.getMessage());
         return new ResponseEntity<>(new CommonErrorDto(HttpStatus.CONFLICT.value(), e.getMessage()), HttpStatus.CONFLICT);
+    }
+
+    // AI 에이전트 제안을 확인·취소할 수 없는 상태: 이미 처리됨(409), 유효 시간 지남(410)
+    @ExceptionHandler(AgentActionException.class)
+    public ResponseEntity<?> agentActionException(AgentActionException e){
+        log.error(e.getMessage());
+        return new ResponseEntity<>(new CommonErrorDto(e.getStatus().value(), e.getMessage()), e.getStatus());
     }
 
     @ExceptionHandler(Exception.class)
