@@ -43,4 +43,16 @@ public class RecipeController {
                         .status_message("AI 레시피 추천 완료")
                         .build(), HttpStatus.OK);
     }
+
+    // 레시피 상세 (재료마다 이 냉장고에 있는지 표시)
+    @GetMapping("/{recipeId}")
+    public ResponseEntity<?> detail(@PathVariable("fridgeId") Long fridgeId,
+                                    @PathVariable("recipeId") Long recipeId) {
+        return new ResponseEntity<>(
+                CommonDto.builder()
+                        .result(recipeRecommendService.detail(fridgeId, recipeId))
+                        .status_code(HttpStatus.OK.value())
+                        .status_message("레시피 상세 조회 완료")
+                        .build(), HttpStatus.OK);
+    }
 }

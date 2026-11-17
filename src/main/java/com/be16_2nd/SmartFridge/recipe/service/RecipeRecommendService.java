@@ -6,12 +6,14 @@ import com.be16_2nd.SmartFridge.food.repository.FoodRepository;
 import com.be16_2nd.SmartFridge.recipe.domain.Ingredient;
 import com.be16_2nd.SmartFridge.recipe.domain.Recipe;
 import com.be16_2nd.SmartFridge.recipe.domain.RecipeIngredient;
+import com.be16_2nd.SmartFridge.recipe.dto.RecipeDetailResDto;
 import com.be16_2nd.SmartFridge.recipe.dto.RecipeRecommendResDto;
 import com.be16_2nd.SmartFridge.recipe.ingredient.IngredientDictionary;
 import com.be16_2nd.SmartFridge.recipe.repository.IngredientRepository;
 import com.be16_2nd.SmartFridge.recipe.repository.RecipeIngredientRepository;
 import com.be16_2nd.SmartFridge.recipe.repository.RecipeMatch;
 import com.be16_2nd.SmartFridge.recipe.repository.RecipeRepository;
+import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
@@ -55,41 +57,14 @@ public class RecipeRecommendService {
         int limit = normalizeSize(size);
         FridgeAccessValidator.FridgeContext context = fridgeAccessValidator.validate(fridgeId);
 
-        LocalDateTime now = LocalDateTime.now();
-        List<Food> foods = foodRepository.findUsableFoods(fridgeId, context.member(), now);
-
-        // 1) 식품 이름 → 재료 대표 이름 (임박 여부는 같은 재료 중 하나라도 임박하면 임박)
-        LocalDateTime expiringBefore = now.plusDays(EXPIRING_DAYS);
-        Map<String, Boolean> expiringByName = new HashMap<>();
-        for (Food food : foods) {
-            String name = toIngredientName(food.getName());
-            if (name.isEmpty()) {
-                continue;
-            }
-            boolean expiring = food.getExpirationDateTime().isBefore(expiringBefore);
-            expiringByName.merge(name, expiring, Boolean::logicalOr);
-        }
-        if (expiringByName.isEmpty()) {
+        OwnedIngredients owned = findOwnedIngredients(fridgeId, context);
+        if (owned.ownedIds().isEmpty()) {
             return List.of();
         }
+        Set<Long> ownedIds = owned.ownedIds();
+        Set<Long> expiringIds = owned.expiringIds();
 
-        // 2) 재료 마스터에서 찾는다 (레시피에 한 번도 나오지 않은 식품과 기본 양념은 여기서 빠진다)
-        Set<Long> ownedIds = new HashSet<>();
-        Set<Long> expiringIds = new HashSet<>();
-        for (Ingredient ingredient : ingredientRepository.findAllByNameIn(expiringByName.keySet())) {
-            if (ingredient.isPantry()) {
-                continue;
-            }
-            ownedIds.add(ingredient.getId());
-            if (expiringByName.get(ingredient.getName())) {
-                expiringIds.add(ingredient.getId());
-            }
-        }
-        if (ownedIds.isEmpty()) {
-            return List.of();
-        }
-
-        // 3) 겹치는 레시피를 추천 순서대로 가져와 재료 목록을 붙인다
+        // 겹치는 레시피를 추천 순서대로 가져와 재료 목록을 붙인다
         List<RecipeMatch> matches = recipeIngredientRepository.findBestMatches(
                 ownedIds, expiringIds.isEmpty() ? Set.of(NO_ID) : expiringIds, Limit.of(limit));
         if (matches.isEmpty()) {
@@ -107,6 +82,91 @@ public class RecipeRecommendService {
                 .map(match -> toDto(match, recipes.get(match.recipeId()),
                         ingredientsByRecipe.getOrDefault(match.recipeId(), List.of()), ownedIds, expiringIds))
                 .toList();
+    }
+
+    /**
+     * 레시피 상세. 재료마다 이 냉장고에 있는지, 유통기한이 임박했는지를 붙인다.
+     * 냉장고 멤버만 볼 수 있다 (재료 보유 여부가 그 냉장고 기준이라서).
+     */
+    public RecipeDetailResDto detail(Long fridgeId, Long recipeId) {
+        FridgeAccessValidator.FridgeContext context = fridgeAccessValidator.validate(fridgeId);
+        Recipe recipe = recipeRepository.findById(recipeId)
+                .orElseThrow(() -> new EntityNotFoundException("레시피를 찾을 수 없습니다."));
+        OwnedIngredients owned = findOwnedIngredients(fridgeId, context);
+
+        List<RecipeDetailResDto.IngredientItem> items = new ArrayList<>();
+        long matchedCount = 0;
+        long totalCount = 0;
+        for (RecipeIngredient ri : recipeIngredientRepository.findAllWithIngredientByRecipeIdIn(List.of(recipeId))) {
+            Ingredient ingredient = ri.getIngredient();
+            boolean pantry = ingredient.isPantry();
+            boolean has = !pantry && owned.ownedIds().contains(ingredient.getId());
+            boolean expiring = has && owned.expiringIds().contains(ingredient.getId());
+            if (!pantry) {
+                totalCount++;
+                if (has) {
+                    matchedCount++;
+                }
+            }
+            items.add(new RecipeDetailResDto.IngredientItem(ingredient.getName(), ri.getAmount(), pantry, has, expiring));
+        }
+
+        List<RecipeDetailResDto.Step> steps = recipe.getSteps().stream()
+                .map(step -> new RecipeDetailResDto.Step(step.getStepOrder(), step.getDescription(), step.getImageUrl()))
+                .toList();
+
+        return new RecipeDetailResDto(
+                recipe.getId(),
+                recipe.getName(),
+                recipe.getDishType(),
+                recipe.getCookingMethod(),
+                recipe.getMainImageUrl(),
+                recipe.getThumbnailUrl(),
+                recipe.getCalories(),
+                recipe.getTip(),
+                matchedCount,
+                totalCount,
+                items,
+                steps);
+    }
+
+    /**
+     * 냉장고 식품을 재료 마스터의 재료로 바꾼다 (기본 양념과 레시피에 한 번도 나오지 않은 식품은 빠진다).
+     * 같은 재료 중 하나라도 유통기한이 임박하면 임박한 재료로 본다.
+     */
+    private OwnedIngredients findOwnedIngredients(Long fridgeId, FridgeAccessValidator.FridgeContext context) {
+        LocalDateTime now = LocalDateTime.now();
+        List<Food> foods = foodRepository.findUsableFoods(fridgeId, context.member(), now);
+
+        LocalDateTime expiringBefore = now.plusDays(EXPIRING_DAYS);
+        Map<String, Boolean> expiringByName = new HashMap<>();
+        for (Food food : foods) {
+            String name = toIngredientName(food.getName());
+            if (name.isEmpty()) {
+                continue;
+            }
+            boolean expiring = food.getExpirationDateTime().isBefore(expiringBefore);
+            expiringByName.merge(name, expiring, Boolean::logicalOr);
+        }
+        if (expiringByName.isEmpty()) {
+            return new OwnedIngredients(Set.of(), Set.of());
+        }
+
+        Set<Long> ownedIds = new HashSet<>();
+        Set<Long> expiringIds = new HashSet<>();
+        for (Ingredient ingredient : ingredientRepository.findAllByNameIn(expiringByName.keySet())) {
+            if (ingredient.isPantry()) {
+                continue;
+            }
+            ownedIds.add(ingredient.getId());
+            if (expiringByName.get(ingredient.getName())) {
+                expiringIds.add(ingredient.getId());
+            }
+        }
+        return new OwnedIngredients(ownedIds, expiringIds);
+    }
+
+    private record OwnedIngredients(Set<Long> ownedIds, Set<Long> expiringIds) {
     }
 
     /**
