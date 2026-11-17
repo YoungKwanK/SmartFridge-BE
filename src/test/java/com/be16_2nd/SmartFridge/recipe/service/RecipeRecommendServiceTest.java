@@ -9,12 +9,14 @@ import com.be16_2nd.SmartFridge.member.domain.Member;
 import com.be16_2nd.SmartFridge.recipe.domain.Ingredient;
 import com.be16_2nd.SmartFridge.recipe.domain.Recipe;
 import com.be16_2nd.SmartFridge.recipe.domain.RecipeIngredient;
+import com.be16_2nd.SmartFridge.recipe.dto.RecipeDetailResDto;
 import com.be16_2nd.SmartFridge.recipe.dto.RecipeRecommendResDto;
 import com.be16_2nd.SmartFridge.recipe.ingredient.IngredientDictionary;
 import com.be16_2nd.SmartFridge.recipe.repository.IngredientRepository;
 import com.be16_2nd.SmartFridge.recipe.repository.RecipeIngredientRepository;
 import com.be16_2nd.SmartFridge.recipe.repository.RecipeMatch;
 import com.be16_2nd.SmartFridge.recipe.repository.RecipeRepository;
+import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,6 +29,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -156,6 +159,67 @@ class RecipeRecommendServiceTest {
         assertThatThrownBy(() -> service.recommend(fridgeId, 0)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> service.recommend(fridgeId, 51)).isInstanceOf(IllegalArgumentException.class);
         verifyNoInteractions(fridgeAccessValidator);
+    }
+
+    @Test
+    void 상세는_재료마다_있는지와_임박했는지를_붙이고_기본_양념은_세지_않는다() {
+        givenFoods(food("달걀", 1), food("대파", 10), food("소금", 100));
+        when(ingredientRepository.findAllByNameIn(anyCollection())).thenReturn(List.of(egg, greenOnion, salt));
+        Recipe recipe = Recipe.builder().id(100L).sourceId(1L).name("계란찜").tip("물을 조금만").build();
+        recipe.replaceSteps(List.of(
+                new Recipe.StepContent("계란을 푼다", "https://img/1.jpg"),
+                new Recipe.StepContent("찐다", null)));
+        when(recipeRepository.findById(100L)).thenReturn(Optional.of(recipe));
+        when(recipeIngredientRepository.findAllWithIngredientByRecipeIdIn(List.of(100L))).thenReturn(List.of(
+                ri(recipe, egg, "2개"), ri(recipe, tofu, "50g"), ri(recipe, greenOnion, null), ri(recipe, salt, "약간")));
+
+        RecipeDetailResDto dto = service.detail(fridgeId, 100L);
+
+        assertThat(dto.name()).isEqualTo("계란찜");
+        assertThat(dto.tip()).isEqualTo("물을 조금만");
+        assertThat(dto.matchedCount()).isEqualTo(2);
+        assertThat(dto.totalCount()).isEqualTo(3);
+        assertThat(dto.ingredients())
+                .extracting(RecipeDetailResDto.IngredientItem::name, RecipeDetailResDto.IngredientItem::amount,
+                        RecipeDetailResDto.IngredientItem::pantry, RecipeDetailResDto.IngredientItem::owned,
+                        RecipeDetailResDto.IngredientItem::expiring)
+                .containsExactly(
+                        tuple("계란", "2개", false, true, true),
+                        tuple("두부", "50g", false, false, false),
+                        tuple("대파", null, false, true, false),
+                        tuple("소금", "약간", true, false, false));
+        assertThat(dto.steps())
+                .extracting(RecipeDetailResDto.Step::order, RecipeDetailResDto.Step::description,
+                        RecipeDetailResDto.Step::imageUrl)
+                .containsExactly(tuple(1, "계란을 푼다", "https://img/1.jpg"), tuple(2, "찐다", null));
+    }
+
+    @Test
+    void 냉장고가_비어도_상세는_모든_재료를_없는_재료로_돌려준다() {
+        givenFoods();
+        Recipe recipe = Recipe.builder().id(100L).sourceId(1L).name("계란찜").build();
+        when(recipeRepository.findById(100L)).thenReturn(Optional.of(recipe));
+        when(recipeIngredientRepository.findAllWithIngredientByRecipeIdIn(List.of(100L)))
+                .thenReturn(List.of(ri(recipe, egg, "2개")));
+
+        RecipeDetailResDto dto = service.detail(fridgeId, 100L);
+
+        assertThat(dto.matchedCount()).isZero();
+        assertThat(dto.totalCount()).isEqualTo(1);
+        assertThat(dto.ingredients()).singleElement()
+                .extracting(RecipeDetailResDto.IngredientItem::owned).isEqualTo(false);
+        assertThat(dto.steps()).isEmpty();
+        verifyNoInteractions(ingredientRepository);
+    }
+
+    @Test
+    void 없는_레시피를_보면_찾을_수_없다고_알린다() {
+        when(fridgeAccessValidator.validate(fridgeId))
+                .thenReturn(new FridgeAccessValidator.FridgeContext(fridge, me, Type.COMMON));
+        when(recipeRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.detail(fridgeId, 999L)).isInstanceOf(EntityNotFoundException.class);
+        verifyNoInteractions(foodRepository, recipeIngredientRepository);
     }
 
     private void givenFoods(Food... foods) {
