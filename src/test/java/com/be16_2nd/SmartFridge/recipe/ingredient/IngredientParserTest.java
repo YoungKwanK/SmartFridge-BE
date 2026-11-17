@@ -69,6 +69,25 @@ class IngredientParserTest {
     }
 
     @Test
+    void 괄호_짝이_안_맞는_원본은_쉼표로만_나눈다() {
+        // 실제 데이터 781번 "갯벌의 여왕 모시조개의 달콤한 유혹"
+        List<ParsedIngredient> result = IngredientParser.parse(
+                "바지락(모시조개( 200g(30개), 양파 15g(2*4cm), 마늘 10g(2쪽), 후추 약간");
+
+        assertThat(result).extracting(ParsedIngredient::name).containsExactly("바지락", "양파", "마늘", "후추");
+        assertThat(result.get(0).amount()).isEqualTo("200g(30개)");
+    }
+
+    @Test
+    void 분량이_너무_길면_자르고_이름이_너무_길면_버린다() {
+        ParsedIngredient longAmount = IngredientParser.parseItem("소금 1" + "가".repeat(200));
+        ParsedIngredient longName = IngredientParser.parseItem("가".repeat(40) + " 10g");
+
+        assertThat(longAmount.amount()).hasSize(IngredientParser.MAX_AMOUNT_LENGTH);
+        assertThat(longName).isNull();
+    }
+
+    @Test
     void 분량이_없으면_분량은_null() {
         List<ParsedIngredient> result = IngredientParser.parse("소금, 후추");
 
