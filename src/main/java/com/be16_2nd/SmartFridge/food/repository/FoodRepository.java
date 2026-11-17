@@ -37,6 +37,10 @@ public interface FoodRepository extends JpaRepository<Food, Long> {
     @Query("SELECT f FROM Food f WHERE FUNCTION('DATE', f.expirationDateTime) IN :dates AND f.member IS NOT NULL")
     List<Food> findAllByExpirationDateIn(@Param("dates") List<LocalDate> dates);
 
+    // 레시피 추천에 쓸 식품: 내 식품과 공유 식품 중 유통기한이 지나지 않은 것
+    @Query("SELECT f FROM Food f WHERE f.fridge.id = :fridgeId AND (f.isShared = true OR f.member = :member) AND f.expirationDateTime >= :now")
+    List<Food> findUsableFoods(@Param("fridgeId") Long fridgeId, @Param("member") Member member, @Param("now") LocalDateTime now);
+
     // --- MANAGER용 메서드 ---
     long countByFridgeId(Long fridgeId);
     long countByFridgeIdAndExpirationDateTimeBefore(Long fridgeId, LocalDateTime now);
