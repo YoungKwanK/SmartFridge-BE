@@ -9,8 +9,15 @@ import com.be16_2nd.SmartFridge.member.domain.Member;
 import com.be16_2nd.SmartFridge.recipe.domain.Ingredient;
 import com.be16_2nd.SmartFridge.recipe.domain.Recipe;
 import com.be16_2nd.SmartFridge.recipe.domain.RecipeIngredient;
+import com.be16_2nd.SmartFridge.recipe.dto.IngredientOptionResDto;
 import com.be16_2nd.SmartFridge.recipe.dto.RecipeDetailResDto;
+import com.be16_2nd.SmartFridge.recipe.dto.RecipePickResDto;
 import com.be16_2nd.SmartFridge.recipe.dto.RecipeRecommendResDto;
+import com.be16_2nd.SmartFridge.recipe.dto.RecipeSearchResDto;
+import com.be16_2nd.SmartFridge.recipe.repository.RecipePickMatch;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.SliceImpl;
 import com.be16_2nd.SmartFridge.recipe.ingredient.IngredientDictionary;
 import com.be16_2nd.SmartFridge.recipe.repository.IngredientRepository;
 import com.be16_2nd.SmartFridge.recipe.repository.RecipeIngredientRepository;
@@ -220,6 +227,136 @@ class RecipeRecommendServiceTest {
 
         assertThatThrownBy(() -> service.detail(fridgeId, 999L)).isInstanceOf(EntityNotFoundException.class);
         verifyNoInteractions(foodRepository, recipeIngredientRepository);
+    }
+
+    @Test
+    void 검색은_띄어쓰기를_빼고_재료마다_냉장고에_있는지를_붙인다() {
+        givenFoods(food("달걀", 10));
+        when(ingredientRepository.findAllByNameIn(anyCollection())).thenReturn(List.of(egg));
+        Recipe recipe = Recipe.builder().id(100L).sourceId(1L).name("계란찜").build();
+        when(recipeRepository.searchByName(eq("계란찜"), any(Pageable.class)))
+                .thenReturn(new SliceImpl<>(List.of(recipe), PageRequest.of(0, 20), true));
+        when(recipeIngredientRepository.findAllWithIngredientByRecipeIdIn(List.of(100L))).thenReturn(List.of(
+                ri(recipe, egg, "2개"), ri(recipe, tofu, "50g"), ri(recipe, salt, "약간")));
+
+        RecipeSearchResDto result = service.search(fridgeId, " 계란 찜 ", null, null);
+
+        assertThat(result.hasNext()).isTrue();
+        assertThat(result.recipes()).singleElement().satisfies(dto -> {
+            assertThat(dto.name()).isEqualTo("계란찜");
+            assertThat(dto.matchedCount()).isEqualTo(1);
+            assertThat(dto.totalCount()).isEqualTo(2);
+            assertThat(dto.matchedIngredients()).containsExactly("계란");
+            assertThat(dto.missingIngredients()).extracting(RecipeRecommendResDto.MissingIngredient::name)
+                    .containsExactly("두부");
+        });
+    }
+
+    @Test
+    void 검색_결과가_없으면_냉장고를_보지_않는다() {
+        when(fridgeAccessValidator.validate(fridgeId))
+                .thenReturn(new FridgeAccessValidator.FridgeContext(fridge, me, Type.COMMON));
+        when(recipeRepository.searchByName(eq("없는요리"), any(Pageable.class)))
+                .thenReturn(new SliceImpl<>(List.of(), PageRequest.of(1, 5), false));
+
+        RecipeSearchResDto result = service.search(fridgeId, "없는요리", 1, 5);
+
+        assertThat(result.recipes()).isEmpty();
+        assertThat(result.hasNext()).isFalse();
+        verifyNoInteractions(foodRepository, recipeIngredientRepository);
+    }
+
+    @Test
+    void 검색어는_LIKE_특수문자를_이스케이프하고_비거나_길면_막는다() {
+        assertThat(RecipeRecommendService.toLikeKeyword("100%_순수!")).isEqualTo("100!%!_순수!!");
+        assertThatThrownBy(() -> service.search(fridgeId, "   ", null, null)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.search(fridgeId, "가".repeat(51), null, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.search(fridgeId, "계란", -1, null)).isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(fridgeAccessValidator);
+    }
+
+    @Test
+    void 재료_검색어가_없으면_냉장고에_있는_재료를_이름순으로_돌려준다() {
+        givenFoods(food("대파", 10), food("달걀", 1), food("소금", 100));
+        when(ingredientRepository.findAllByNameIn(anyCollection())).thenReturn(List.of(egg, greenOnion, salt));
+        when(ingredientRepository.findAllById(anyCollection())).thenReturn(List.of(greenOnion, egg));
+
+        List<IngredientOptionResDto> result = service.searchIngredients(fridgeId, null);
+
+        assertThat(result)
+                .extracting(IngredientOptionResDto::name, IngredientOptionResDto::owned, IngredientOptionResDto::expiring)
+                .containsExactly(tuple("계란", true, true), tuple("대파", true, false));
+    }
+
+    @Test
+    void 재료_검색은_냉장고에_없는_재료도_찾고_별칭의_대표_이름을_맨_앞에_둔다() {
+        givenFoods(food("대파", 10));
+        when(ingredientRepository.findAllByNameIn(anyCollection())).thenAnswer(invocation -> {
+            Collection<String> names = invocation.getArgument(0);
+            return names.contains("계란") ? List.of(egg) : List.of(greenOnion);
+        });
+        Ingredient eggYolk = Ingredient.builder().id(20L).name("달걀지단").pantry(false).build();
+        when(ingredientRepository.searchByName(eq("달걀"), any(Limit.class))).thenReturn(List.of(eggYolk));
+
+        List<IngredientOptionResDto> result = service.searchIngredients(fridgeId, "달걀");
+
+        assertThat(result)
+                .extracting(IngredientOptionResDto::name, IngredientOptionResDto::owned)
+                .containsExactly(tuple("계란", false), tuple("달걀지단", false));
+    }
+
+    @Test
+    void 고른_재료로_추천하면_고른_재료와_냉장고_재료를_합쳐_찾고_고른_재료를_표시한다() {
+        givenFoods(food("대파", 10));
+        when(ingredientRepository.findAllByNameIn(anyCollection())).thenReturn(List.of(greenOnion));
+        // 두부는 냉장고에 없지만 고를 수 있다, 소금(기본 양념)과 없는 id 는 무시한다
+        when(ingredientRepository.findAllById(anyCollection())).thenReturn(List.of(tofu, salt));
+        when(recipeIngredientRepository.findBySelectedIngredients(anyCollection(), anyCollection(), any(Limit.class)))
+                .thenReturn(List.of(new RecipePickMatch(100L, 1L, 2L, 3L)));
+        Recipe recipe = Recipe.builder().id(100L).sourceId(1L).name("두부조림").build();
+        when(recipeRepository.findAllById(List.of(100L))).thenReturn(List.of(recipe));
+        when(recipeIngredientRepository.findAllWithIngredientByRecipeIdIn(List.of(100L))).thenReturn(List.of(
+                ri(recipe, tofu, "1모"), ri(recipe, greenOnion, "10g"), ri(recipe, egg, "1개"), ri(recipe, salt, "약간")));
+
+        List<RecipePickResDto> result = service.recommendByIngredients(fridgeId, List.of(12L, 13L, 999L), null);
+
+        assertThat(result).singleElement().satisfies(pick -> {
+            assertThat(pick.selectedIngredients()).containsExactly("두부");
+            assertThat(pick.recipe().matchedIngredients()).containsExactly("대파");
+            assertThat(pick.recipe().missingIngredients()).extracting(RecipeRecommendResDto.MissingIngredient::name)
+                    .containsExactly("두부", "계란");
+        });
+        ArgumentCaptor<Collection<Long>> selected = idsCaptor();
+        ArgumentCaptor<Collection<Long>> available = idsCaptor();
+        verify(recipeIngredientRepository).findBySelectedIngredients(selected.capture(), available.capture(),
+                eq(Limit.of(RecipeRecommendService.DEFAULT_SIZE)));
+        assertThat(selected.getValue()).containsExactly(12L);
+        assertThat(available.getValue()).containsExactlyInAnyOrder(11L, 12L);
+    }
+
+    @Test
+    void 고른_재료가_모두_기본_양념이면_레시피를_찾지_않는다() {
+        when(fridgeAccessValidator.validate(fridgeId))
+                .thenReturn(new FridgeAccessValidator.FridgeContext(fridge, me, Type.COMMON));
+        when(ingredientRepository.findAllById(anyCollection())).thenReturn(List.of(salt));
+
+        assertThat(service.recommendByIngredients(fridgeId, List.of(13L), null)).isEmpty();
+        verifyNoInteractions(foodRepository, recipeIngredientRepository, recipeRepository);
+    }
+
+    @Test
+    void 재료는_1개에서_10개까지_고를_수_있다() {
+        assertThatThrownBy(() -> service.recommendByIngredients(fridgeId, null, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.recommendByIngredients(fridgeId, List.of(), null))
+                .isInstanceOf(IllegalArgumentException.class);
+        List<Long> eleven = java.util.stream.LongStream.rangeClosed(1, 11).boxed().toList();
+        assertThatThrownBy(() -> service.recommendByIngredients(fridgeId, eleven, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        // 같은 재료를 여러 번 넘기면 하나로 센다
+        assertThat(RecipeRecommendService.normalizeSelectedIds(List.of(1L, 1L, 2L))).containsExactly(1L, 2L);
+        verifyNoInteractions(fridgeAccessValidator);
     }
 
     private void givenFoods(Food... foods) {
