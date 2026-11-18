@@ -124,7 +124,7 @@ class AgentChatLiveTest {
                 .thenReturn(new FridgeAccessValidator.FridgeContext(fridge, me, Type.COMMON));
 
         agentChatService = new AgentChatService(new AiConfig().anthropicClient(properties), properties,
-                toolExecutor, conversationStore, fridgeAccessValidator);
+                toolExecutor, conversationStore, fridgeAccessValidator, agentActionService);
     }
 
     // ===== 조회 =====

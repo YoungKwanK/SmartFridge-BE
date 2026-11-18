@@ -1,6 +1,7 @@
 package com.be16_2nd.SmartFridge.agent.service;
 
 import com.be16_2nd.SmartFridge.agent.domain.AgentAction;
+import com.be16_2nd.SmartFridge.agent.domain.AgentActionStatus;
 import com.be16_2nd.SmartFridge.agent.domain.AgentActionType;
 import com.be16_2nd.SmartFridge.agent.dto.AgentActionConfirmResDto;
 import com.be16_2nd.SmartFridge.agent.dto.AgentActionResDto;
@@ -19,7 +20,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -62,6 +66,23 @@ public class AgentActionService {
         AgentAction action = AgentAction.propose(fridgeId, context.member().getId(), type, checkedIds, LocalDateTime.now());
         agentActionRepository.save(action);
         return AgentActionResDto.of(action, foods);
+    }
+
+    /**
+     * 여러 제안의 지금 상태. 처리 전인데 10분이 지났으면 EXPIRED로 본다 (DB는 확인 버튼을 눌러야 EXPIRED로 바뀐다).
+     * 기록이 없는 제안도 EXPIRED로 본다. 대화를 다시 그릴 때와 Claude에게 지난 제안의 결과를 알려 줄 때 쓴다.
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, AgentActionStatus> currentStatuses(Collection<UUID> actionIds) {
+        Map<UUID, AgentActionStatus> statuses = new HashMap<>();
+        if (actionIds.isEmpty()) {
+            return statuses;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        agentActionRepository.findAllById(actionIds).forEach(action -> statuses.put(action.getId(),
+                action.isPending() && action.isExpired(now) ? AgentActionStatus.EXPIRED : action.getStatus()));
+        actionIds.forEach(id -> statuses.putIfAbsent(id, AgentActionStatus.EXPIRED));
+        return statuses;
     }
 
     // ===== 확인·취소 (화면 버튼 전용) =====

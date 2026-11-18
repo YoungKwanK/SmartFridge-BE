@@ -18,7 +18,10 @@ import com.be16_2nd.SmartFridge.agent.chat.AgentPrompts;
 import com.be16_2nd.SmartFridge.agent.chat.AgentToolExecutor;
 import com.be16_2nd.SmartFridge.agent.chat.AgentToolExecutor.ToolOutcome;
 import com.be16_2nd.SmartFridge.agent.chat.AgentTools;
+import com.be16_2nd.SmartFridge.agent.domain.AgentActionStatus;
+import com.be16_2nd.SmartFridge.agent.domain.AgentActionType;
 import com.be16_2nd.SmartFridge.agent.dto.AgentActionResDto;
+import com.be16_2nd.SmartFridge.agent.dto.AgentChatHistoryResDto;
 import com.be16_2nd.SmartFridge.agent.dto.AgentChatResDto;
 import com.be16_2nd.SmartFridge.agent.exception.AgentChatException;
 import com.be16_2nd.SmartFridge.common.ai.AiException;
@@ -33,6 +36,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -60,6 +64,7 @@ public class AgentChatService {
     private final AgentToolExecutor toolExecutor;
     private final AgentConversationStore conversationStore;
     private final FridgeAccessValidator fridgeAccessValidator;
+    private final AgentActionService agentActionService;
 
     public AgentChatResDto chat(Long fridgeId, String userMessage) {
         FridgeAccessValidator.FridgeContext context = fridgeAccessValidator.validate(fridgeId);
@@ -71,7 +76,8 @@ public class AgentChatService {
         }
 
         List<Turn> history = conversationStore.load(fridgeId, memberId);
-        MessageCreateParams params = initialParams(context, history, userMessage);
+        Map<UUID, AgentActionStatus> statuses = agentActionService.currentStatuses(actionIds(history));
+        MessageCreateParams params = initialParams(context, history, statuses, userMessage);
 
         List<AgentActionResDto> actions = new ArrayList<>();
         String answer = null;
@@ -110,11 +116,34 @@ public class AgentChatService {
         }
 
         String message = finalMessage(answer, actions);
-        conversationStore.append(fridgeId, memberId, history, userMessage, withActionNote(message, actions));
+        conversationStore.append(fridgeId, memberId, history, userMessage, message, actions);
         return AgentChatResDto.builder()
                 .message(message)
                 .actions(actions)
-                .remainingToday(Math.max(0, AgentConversationStore.DAILY_LIMIT - used))
+                .remainingToday(remaining(used))
+                .build();
+    }
+
+    /**
+     * 지금까지의 대화를 돌려준다 (화면을 열거나 새로고침할 때 다시 그리는 용도).
+     * 확인 카드는 띄울 때 모습 그대로이되, 상태만 지금 상태로 바꿔 준다 (이미 눌렀는지, 시간이 지났는지).
+     */
+    public AgentChatHistoryResDto history(Long fridgeId) {
+        FridgeAccessValidator.FridgeContext context = fridgeAccessValidator.validate(fridgeId);
+        UUID memberId = context.member().getId();
+
+        List<Turn> turns = conversationStore.load(fridgeId, memberId);
+        Map<UUID, AgentActionStatus> statuses = agentActionService.currentStatuses(actionIds(turns));
+        List<AgentChatHistoryResDto.Message> messages = turns.stream()
+                .map(turn -> AgentChatHistoryResDto.Message.builder()
+                        .role(turn.role())
+                        .text(turn.text())
+                        .actions(turn.actions().stream().map(action -> withStatus(action, statuses)).toList())
+                        .build())
+                .toList();
+        return AgentChatHistoryResDto.builder()
+                .messages(messages)
+                .remainingToday(remaining(conversationStore.usage(memberId)))
                 .build();
     }
 
@@ -124,7 +153,8 @@ public class AgentChatService {
         conversationStore.clear(fridgeId, context.member().getId());
     }
 
-    private MessageCreateParams initialParams(FridgeAccessValidator.FridgeContext context, List<Turn> history, String userMessage) {
+    private MessageCreateParams initialParams(FridgeAccessValidator.FridgeContext context, List<Turn> history,
+                                              Map<UUID, AgentActionStatus> statuses, String userMessage) {
         MessageCreateParams.Builder builder = MessageCreateParams.builder()
                 .model(aiProperties.model())
                 .maxTokens(aiProperties.maxTokens())
@@ -137,7 +167,7 @@ public class AgentChatService {
 
         for (Turn turn : history) {
             if ("assistant".equals(turn.role())) {
-                builder.addAssistantMessage(turn.text());
+                builder.addAssistantMessage(withActionNote(turn.text(), turn.actions(), statuses));
             } else {
                 builder.addUserMessage(turn.text());
             }
@@ -164,16 +194,59 @@ public class AgentChatService {
         return GAVE_UP_MESSAGE;
     }
 
-    // 다음 질문에서 Claude가 "아까 제안"을 알 수 있게 대화 기록에만 제안 내용을 덧붙인다
-    private static String withActionNote(String message, List<AgentActionResDto> actions) {
+    /**
+     * Claude에게 보낼 때만 지난 답변 뒤에 그때 띄운 확인 카드와 지금 상태를 덧붙인다.
+     * 그래야 "아까 그거 취소할래"나 "처리됐어?" 같은 말을 이해한다. 화면에는 이 메모가 보이지 않는다.
+     */
+    static String withActionNote(String text, List<AgentActionResDto> actions, Map<UUID, AgentActionStatus> statuses) {
         if (actions.isEmpty()) {
-            return message;
+            return text;
         }
         String note = actions.stream()
-                .map(action -> action.getType() + " " + action.getFoods().stream()
-                        .map(FoodResDto::getName).collect(Collectors.joining(", ")))
+                .map(action -> typeLabel(action.getType()) + " " + action.getFoods().stream()
+                        .map(FoodResDto::getName).collect(Collectors.joining(", "))
+                        + " (" + statusLabel(statuses.getOrDefault(action.getId(), action.getStatus())) + ")")
                 .collect(Collectors.joining(" / "));
-        return message + "\n[확인 카드를 띄움: " + note + " - 사용자 확인 대기]";
+        return text + "\n[이 답변에서 띄운 확인 카드: " + note + "]";
+    }
+
+    private static String typeLabel(AgentActionType type) {
+        return switch (type) {
+            case FINISH_CONSUMED -> "다 먹음";
+            case FINISH_DISCARDED -> "버림";
+            case DELETE -> "잘못 등록 삭제";
+        };
+    }
+
+    private static String statusLabel(AgentActionStatus status) {
+        return switch (status) {
+            case PENDING -> "사용자 확인 대기";
+            case CONFIRMED -> "사용자가 확인해 처리됨";
+            case CANCELLED -> "사용자가 취소함";
+            case EXPIRED -> "시간이 지나 처리 안 됨";
+            case FAILED -> "확인했지만 처리 실패";
+        };
+    }
+
+    private static AgentActionResDto withStatus(AgentActionResDto action, Map<UUID, AgentActionStatus> statuses) {
+        return AgentActionResDto.builder()
+                .id(action.getId())
+                .type(action.getType())
+                .status(statuses.getOrDefault(action.getId(), action.getStatus()))
+                .foods(action.getFoods())
+                .expiresAt(action.getExpiresAt())
+                .build();
+    }
+
+    private static List<UUID> actionIds(List<Turn> turns) {
+        return turns.stream()
+                .flatMap(turn -> turn.actions().stream())
+                .map(AgentActionResDto::getId)
+                .toList();
+    }
+
+    private static long remaining(long used) {
+        return Math.max(0, AgentConversationStore.DAILY_LIMIT - used);
     }
 
     private void validateStopReason(Message response) {

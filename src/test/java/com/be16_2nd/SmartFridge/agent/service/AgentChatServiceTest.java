@@ -11,6 +11,7 @@ import com.be16_2nd.SmartFridge.agent.chat.AgentToolExecutor.ToolOutcome;
 import com.be16_2nd.SmartFridge.agent.domain.AgentActionStatus;
 import com.be16_2nd.SmartFridge.agent.domain.AgentActionType;
 import com.be16_2nd.SmartFridge.agent.dto.AgentActionResDto;
+import com.be16_2nd.SmartFridge.agent.dto.AgentChatHistoryResDto;
 import com.be16_2nd.SmartFridge.agent.dto.AgentChatResDto;
 import com.be16_2nd.SmartFridge.agent.exception.AgentChatException;
 import com.be16_2nd.SmartFridge.common.ai.AiException;
@@ -28,6 +29,7 @@ import org.springframework.http.HttpStatus;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -54,6 +56,7 @@ class AgentChatServiceTest {
     AgentToolExecutor toolExecutor;
     AgentConversationStore conversationStore;
     FridgeAccessValidator fridgeAccessValidator;
+    AgentActionService agentActionService;
     AgentChatService agentChatService;
 
     final Long fridgeId = 1L;
@@ -66,8 +69,10 @@ class AgentChatServiceTest {
         toolExecutor = mock(AgentToolExecutor.class);
         conversationStore = mock(AgentConversationStore.class);
         fridgeAccessValidator = mock(FridgeAccessValidator.class);
+        agentActionService = mock(AgentActionService.class);
         AiProperties properties = new AiProperties("test-key", "claude-haiku-5-5", 16000L, Duration.ofSeconds(60), 2);
-        agentChatService = new AgentChatService(anthropicClient, properties, toolExecutor, conversationStore, fridgeAccessValidator);
+        agentChatService = new AgentChatService(anthropicClient, properties, toolExecutor, conversationStore,
+                fridgeAccessValidator, agentActionService);
 
         loginAs(Type.COMMON);
         when(conversationStore.increaseUsage(me.getId())).thenReturn(1L);
@@ -84,7 +89,7 @@ class AgentChatServiceTest {
         assertThat(res.getMessage()).isEqualTo("안녕하세요. 냉장고 식품을 찾아 드릴게요.");
         assertThat(res.getActions()).isEmpty();
         assertThat(res.getRemainingToday()).isEqualTo(29);
-        verify(conversationStore).append(fridgeId, me.getId(), List.of(), "안녕", "안녕하세요. 냉장고 식품을 찾아 드릴게요.");
+        verify(conversationStore).append(fridgeId, me.getId(), List.of(), "안녕", "안녕하세요. 냉장고 식품을 찾아 드릴게요.", List.of());
         verifyNoInteractions(toolExecutor);
     }
 
@@ -108,11 +113,8 @@ class AgentChatServiceTest {
     }
 
     @Test
-    void 제안_도구가_만든_확인_카드를_응답에_담고_대화_기록에_제안을_남긴다() throws Exception {
-        AgentActionResDto action = AgentActionResDto.builder()
-                .id(UUID.randomUUID()).type(AgentActionType.FINISH_DISCARDED).status(AgentActionStatus.PENDING)
-                .foods(List.of(FoodResDto.builder().id(12L).name("두부").build()))
-                .expiresAt(LocalDateTime.now().plusMinutes(10)).build();
+    void 제안_도구가_만든_확인_카드를_응답에_담고_대화_기록에_카드를_함께_저장한다() throws Exception {
+        AgentActionResDto action = tofuCard(UUID.randomUUID());
         when(anthropicClient.messages().create(any(MessageCreateParams.class)))
                 .thenReturn(
                         message("tool_use", toolUse("toolu_1", "propose_finish", "{\"foodIds\":[12],\"result\":\"폐기\"}")),
@@ -123,9 +125,53 @@ class AgentChatServiceTest {
         AgentChatResDto res = agentChatService.chat(fridgeId, "두부 버렸어");
 
         assertThat(res.getActions()).containsExactly(action);
-        ArgumentCaptor<String> saved = ArgumentCaptor.forClass(String.class);
-        verify(conversationStore).append(eq(fridgeId), eq(me.getId()), anyList(), eq("두부 버렸어"), saved.capture());
-        assertThat(saved.getValue()).contains("확인 카드를 띄움").contains("FINISH_DISCARDED 두부");
+        // 화면에 보일 답은 그대로, 카드는 따로 저장한다 (AI용 메모가 답 문장에 섞이지 않게)
+        verify(conversationStore).append(fridgeId, me.getId(), List.of(), "두부 버렸어",
+                "두부를 버린 것으로 정리할까요? 확인 카드를 눌러 주세요.", List.of(action));
+    }
+
+    @Test
+    void 지난_답변의_확인_카드와_지금_상태를_Claude에게_알려준다() throws Exception {
+        UUID cardId = UUID.randomUUID();
+        when(conversationStore.load(fridgeId, me.getId())).thenReturn(List.of(
+                Turn.user("두부 버렸어"),
+                Turn.assistant("두부를 버린 것으로 정리할까요?", List.of(tofuCard(cardId)))));
+        when(agentActionService.currentStatuses(List.of(cardId)))
+                .thenReturn(Map.of(cardId, AgentActionStatus.CONFIRMED));
+        when(anthropicClient.messages().create(any(MessageCreateParams.class)))
+                .thenReturn(message("end_turn", text("네, 두부는 처리됐어요.")));
+
+        agentChatService.chat(fridgeId, "처리됐어?");
+
+        assertThat(body(sentRequests(1).get(0)))
+                .contains("두부를 버린 것으로 정리할까요?")
+                .contains("이 답변에서 띄운 확인 카드: 버림 두부 (사용자가 확인해 처리됨)");
+    }
+
+    @Test
+    void 대화_기록은_화면용_문장과_지금_카드_상태로_돌려준다() {
+        UUID cardId = UUID.randomUUID();
+        when(conversationStore.load(fridgeId, me.getId())).thenReturn(List.of(
+                Turn.user("두부 버렸어"),
+                Turn.assistant("두부를 버린 것으로 정리할까요?", List.of(tofuCard(cardId)))));
+        when(agentActionService.currentStatuses(List.of(cardId)))
+                .thenReturn(Map.of(cardId, AgentActionStatus.CANCELLED));
+        when(conversationStore.usage(me.getId())).thenReturn(4L);
+
+        AgentChatHistoryResDto res = agentChatService.history(fridgeId);
+
+        assertThat(res.getMessages()).extracting(AgentChatHistoryResDto.Message::getRole)
+                .containsExactly("user", "assistant");
+        AgentChatHistoryResDto.Message answer = res.getMessages().get(1);
+        assertThat(answer.getText()).isEqualTo("두부를 버린 것으로 정리할까요?");
+        assertThat(answer.getActions()).singleElement()
+                .satisfies(card -> {
+                    assertThat(card.getId()).isEqualTo(cardId);
+                    assertThat(card.getStatus()).isEqualTo(AgentActionStatus.CANCELLED);
+                    assertThat(card.getFoods()).extracting(FoodResDto::getName).containsExactly("두부");
+                });
+        assertThat(res.getRemainingToday()).isEqualTo(26);
+        verify(anthropicClient.messages(), never()).create(any(MessageCreateParams.class));
     }
 
     @Test
@@ -147,7 +193,7 @@ class AgentChatServiceTest {
     void 이전_대화와_오늘_날짜_권한을_함께_보낸다() throws Exception {
         loginAs(Type.MANAGER);
         when(conversationStore.load(fridgeId, me.getId()))
-                .thenReturn(List.of(new Turn("user", "우유 있어?"), new Turn("assistant", "우유 1개 있어요.")));
+                .thenReturn(List.of(Turn.user("우유 있어?"), Turn.assistant("우유 1개 있어요.", List.of())));
         when(anthropicClient.messages().create(any(MessageCreateParams.class)))
                 .thenReturn(message("end_turn", text("네, 그 우유예요.")));
 
@@ -169,7 +215,7 @@ class AgentChatServiceTest {
                 .isInstanceOf(AgentChatException.class)
                 .satisfies(e -> assertThat(((AgentChatException) e).getStatus()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS));
         verify(anthropicClient.messages(), never()).create(any(MessageCreateParams.class));
-        verify(conversationStore, never()).append(anyLong(), any(), anyList(), anyString(), anyString());
+        verify(conversationStore, never()).append(anyLong(), any(), anyList(), anyString(), anyString(), anyList());
     }
 
     @Test
@@ -193,7 +239,14 @@ class AgentChatServiceTest {
         assertThatThrownBy(() -> agentChatService.chat(fridgeId, "이상한 요청"))
                 .isInstanceOf(AiException.class)
                 .satisfies(e -> assertThat(((AiException) e).getStatus()).isEqualTo(HttpStatus.BAD_GATEWAY));
-        verify(conversationStore, never()).append(anyLong(), any(), anyList(), anyString(), anyString());
+        verify(conversationStore, never()).append(anyLong(), any(), anyList(), anyString(), anyString(), anyList());
+    }
+
+    private AgentActionResDto tofuCard(UUID id) {
+        return AgentActionResDto.builder()
+                .id(id).type(AgentActionType.FINISH_DISCARDED).status(AgentActionStatus.PENDING)
+                .foods(List.of(FoodResDto.builder().id(12L).name("두부").build()))
+                .expiresAt(LocalDateTime.now().plusMinutes(10)).build();
     }
 
     private void loginAs(Type type) {
