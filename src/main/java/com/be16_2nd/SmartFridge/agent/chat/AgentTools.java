@@ -29,13 +29,15 @@ public final class AgentTools {
 
     private static Tool findFoods() {
         return tool(FIND_FOODS,
-                "냉장고에서 조건에 맞는 식품을 찾는다. 사용자가 볼 수 있는 식품만 나오고 유통기한이 가까운 순서로 최대 50개를 돌려준다. "
+                "냉장고에서 조건에 맞는 식품을 찾는다. 유통기한이 가까운 순서로 최대 50개를 돌려준다. "
                         + "식품에 대해 답하거나 제안하기 전에 반드시 이 도구로 실제 식품과 id를 확인한다.",
                 Map.of(
                         "keyword", Map.of("type", "string",
                                 "description", "식품 이름 일부 (예: 우유). 이름에 이 글자가 들어간 식품을 찾는다"),
                         "category", Map.of("type", "string",
-                                "enum", List.of("유제품", "가공식품", "채소", "과일", "고기", "음료", "기타")),
+                                "enum", List.of("유제품", "가공식품", "채소", "과일", "고기", "음료", "기타"),
+                                "description", "사용자가 종류를 직접 말했을 때만 넣는다 (예: '채소 뭐 있어?'). "
+                                        + "식품 이름으로 찾을 때는 넣지 않는다. 사용자가 다른 카테고리로 등록했을 수 있다"),
                         "status", Map.of("type", "string",
                                 "enum", List.of("ALL", "EXPIRED", "TODAY", "SOON"),
                                 "description", "ALL: 전부, EXPIRED: 유통기한 지남, TODAY: 오늘까지, SOON: 3일 안에 끝남"),

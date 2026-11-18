@@ -155,7 +155,7 @@ class AgentChatServiceTest {
 
         String request = body(sentRequests(1).get(0));
         assertThat(request).contains("우유 있어?").contains("우유 1개 있어요.").contains("그거 언제까지야?");
-        assertThat(request).contains("냉장고 관리자").contains("지금: ");
+        assertThat(request).contains("냉장고 관리자").contains("지금: ").contains("사용자 이름: 홍길동");
         // 도구 4개를 모두 strict로 보낸다
         assertThat(request).contains("find_foods").contains("get_food_detail")
                 .contains("propose_finish").contains("propose_delete").contains("\"strict\":true");

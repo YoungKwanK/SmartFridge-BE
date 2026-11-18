@@ -131,7 +131,8 @@ public class AgentChatService {
                 // 바뀌지 않는 규칙을 앞에, 요청마다 바뀌는 정보(날짜, 권한)를 뒤에 둔다
                 .systemOfTextBlockParams(List.of(
                         TextBlockParam.builder().text(AgentPrompts.RULES).build(),
-                        TextBlockParam.builder().text(AgentPrompts.context(LocalDateTime.now(), context.type())).build()));
+                        TextBlockParam.builder().text(AgentPrompts.context(
+                                LocalDateTime.now(), context.type(), context.member().getName())).build()));
         AgentTools.all().forEach(builder::addTool);
 
         for (Turn turn : history) {

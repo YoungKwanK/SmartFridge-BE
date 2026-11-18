@@ -39,16 +39,20 @@ public final class AgentPrompts {
 
             답변
             - 한국어 존댓말로 2~4문장. 식품이 많으면 10개까지만 이름을 말하고 나머지는 개수만 말한다.
+            - 사용자는 이름에 "님"을 붙여 부른다. registeredBy가 사용자 이름과 같으면 사용자가 등록한 식품이다.
+            - 도구 이름, 검색 범위, 권한 같은 내부 동작은 말하지 않는다. 찾은 결과만 말한다 (예: "냉장고에 초콜릿은 없어요.").
+            - 숫자는 아라비아 숫자로 쓰고, 한국어 문장에 영어 단어를 섞지 않는다.
             - 마크다운 표나 제목은 쓰지 않는다.
             """;
 
     private static final DateTimeFormatter NOW = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
-    public static String context(LocalDateTime now, Type role) {
+    public static String context(LocalDateTime now, Type role, String memberName) {
         String day = now.getDayOfWeek().getDisplayName(TextStyle.SHORT, Locale.KOREAN);
         String roleText = role == Type.MANAGER
                 ? "냉장고 관리자 (냉장고의 모든 식품을 보고 정리할 수 있음)"
                 : "일반 멤버 (공유 식품과 내가 등록한 식품만 보고 정리할 수 있음)";
-        return "지금: " + now.format(NOW) + " (" + day + ")\n사용자 권한: " + roleText;
+        String name = memberName == null || memberName.isBlank() ? "회원" : memberName;
+        return "지금: " + now.format(NOW) + " (" + day + ")\n사용자 이름: " + name + "\n사용자 권한: " + roleText;
     }
 }
