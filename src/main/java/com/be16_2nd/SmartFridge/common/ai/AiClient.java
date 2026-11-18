@@ -5,6 +5,8 @@ import com.anthropic.errors.AnthropicInvalidDataException;
 import com.anthropic.errors.AnthropicIoException;
 import com.anthropic.errors.AnthropicServiceException;
 import com.anthropic.errors.RateLimitException;
+import com.anthropic.models.messages.Base64ImageSource;
+import com.anthropic.models.messages.ContentBlockParam;
 import com.anthropic.models.messages.Message;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.OutputConfig;
@@ -19,6 +21,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -32,6 +37,9 @@ import java.util.stream.Collectors;
  *
  * // 2) DTO(record)로 받기 - 클래스 구조대로 JSON 스키마를 만들어 그 형식으로만 답하게 한다
  * RecipeRecommendation result = aiClient.generate(AiPrompt.of(SYSTEM_PROMPT, userInput), RecipeRecommendation.class);
+ *
+ * // 3) 이미지와 함께 보내기 - AiPrompt.images 에 담으면 이미지 → 글 순서로 보낸다
+ * ReceiptAiResult result = aiClient.generate(AiPrompt.builder()...images(List.of(new AiImage(bytes, "image/jpeg"))).build(), ReceiptAiResult.class);
  * </pre>
  *
  * 실패하면 {@link AiException} 을 던지고, CommonExceptionHandler 가 상태 코드로 바꿔 응답한다.
@@ -89,12 +97,29 @@ public class AiClient {
     private MessageCreateParams.Builder baseBuilder(AiPrompt prompt) {
         MessageCreateParams.Builder builder = MessageCreateParams.builder()
                 .model(prompt.model() != null ? prompt.model() : properties.model())
-                .maxTokens(prompt.maxTokens() != null ? prompt.maxTokens() : properties.maxTokens())
-                .addUserMessage(prompt.user());
+                .maxTokens(prompt.maxTokens() != null ? prompt.maxTokens() : properties.maxTokens());
+        if (prompt.images().isEmpty()) {
+            builder.addUserMessage(prompt.user());
+        } else {
+            builder.addUserMessageOfContentBlockParams(userContentWithImages(prompt));
+        }
         if (prompt.system() != null && !prompt.system().isBlank()) {
             builder.system(prompt.system());
         }
         return builder;
+    }
+
+    // 이미지 → 글 순서로 담는다 (이미지를 먼저 두는 편이 인식이 잘 된다)
+    private static List<ContentBlockParam> userContentWithImages(AiPrompt prompt) {
+        List<ContentBlockParam> blocks = new ArrayList<>();
+        for (AiImage image : prompt.images()) {
+            blocks.add(ContentBlockParam.ofImage(Base64ImageSource.builder()
+                    .mediaType(Base64ImageSource.MediaType.of(image.mediaType()))
+                    .data(Base64.getEncoder().encodeToString(image.data()))
+                    .build()));
+        }
+        blocks.add(ContentBlockParam.ofText(prompt.user()));
+        return blocks;
     }
 
     // SDK 예외를 서비스 예외로 바꾼다. 429·5xx·네트워크 오류는 SDK가 이미 재시도한 뒤의 실패다
