@@ -6,26 +6,35 @@ import com.be16_2nd.SmartFridge.food.repository.FoodRepository;
 import com.be16_2nd.SmartFridge.recipe.domain.Ingredient;
 import com.be16_2nd.SmartFridge.recipe.domain.Recipe;
 import com.be16_2nd.SmartFridge.recipe.domain.RecipeIngredient;
+import com.be16_2nd.SmartFridge.recipe.dto.IngredientOptionResDto;
 import com.be16_2nd.SmartFridge.recipe.dto.RecipeDetailResDto;
+import com.be16_2nd.SmartFridge.recipe.dto.RecipePickResDto;
 import com.be16_2nd.SmartFridge.recipe.dto.RecipeRecommendResDto;
+import com.be16_2nd.SmartFridge.recipe.dto.RecipeSearchResDto;
 import com.be16_2nd.SmartFridge.recipe.ingredient.IngredientDictionary;
 import com.be16_2nd.SmartFridge.recipe.repository.IngredientRepository;
 import com.be16_2nd.SmartFridge.recipe.repository.RecipeIngredientRepository;
 import com.be16_2nd.SmartFridge.recipe.repository.RecipeMatch;
+import com.be16_2nd.SmartFridge.recipe.repository.RecipePickMatch;
 import com.be16_2nd.SmartFridge.recipe.repository.RecipeRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Limit;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -43,6 +52,11 @@ public class RecipeRecommendService {
     public static final int MAX_SIZE = 50;
     // 이 기간 안에 유통기한이 끝나는 재료를 먼저 쓰는 레시피를 앞에 둔다
     static final int EXPIRING_DAYS = 3;
+    // 재료 검색 결과 최대 개수
+    static final int INGREDIENT_OPTION_SIZE = 20;
+    // 한 번에 고를 수 있는 재료 수
+    public static final int MAX_SELECTED_INGREDIENTS = 10;
+    static final int MAX_KEYWORD_LENGTH = 50;
     // IN 조건에 빈 목록을 넘기지 않으려고 쓰는 없는 id
     private static final Long NO_ID = -1L;
 
@@ -73,15 +87,126 @@ public class RecipeRecommendService {
         List<Long> recipeIds = matches.stream().map(RecipeMatch::recipeId).toList();
         Map<Long, Recipe> recipes = recipeRepository.findAllById(recipeIds).stream()
                 .collect(Collectors.toMap(Recipe::getId, Function.identity()));
+        Map<Long, List<RecipeIngredient>> ingredientsByRecipe = findIngredientsByRecipe(recipeIds);
+
+        return recipeIds.stream()
+                .map(id -> toDto(recipes.get(id), ingredientsByRecipe.getOrDefault(id, List.of()), owned))
+                .toList();
+    }
+
+    /**
+     * 레시피 이름 검색. 띄어쓰기는 무시하고, 이름이 짧은(검색어에 가까운) 순으로 돌려준다.
+     * 재료마다 이 냉장고에 있는지를 붙여서 추천 목록과 같은 모양으로 보여줄 수 있게 한다.
+     */
+    public RecipeSearchResDto search(Long fridgeId, String keyword, Integer page, Integer size) {
+        String pattern = toLikeKeyword(keyword);
+        int limit = normalizeSize(size);
+        int pageNo = normalizePage(page);
+        FridgeAccessValidator.FridgeContext context = fridgeAccessValidator.validate(fridgeId);
+
+        Slice<Recipe> slice = recipeRepository.searchByName(pattern, PageRequest.of(pageNo, limit));
+        if (slice.isEmpty()) {
+            return new RecipeSearchResDto(List.of(), false);
+        }
+        OwnedIngredients owned = findOwnedIngredients(fridgeId, context);
+        List<Long> recipeIds = slice.getContent().stream().map(Recipe::getId).toList();
+        Map<Long, List<RecipeIngredient>> ingredientsByRecipe = findIngredientsByRecipe(recipeIds);
+
+        List<RecipeRecommendResDto> recipes = slice.getContent().stream()
+                .map(recipe -> toDto(recipe, ingredientsByRecipe.getOrDefault(recipe.getId(), List.of()), owned))
+                .toList();
+        return new RecipeSearchResDto(recipes, slice.hasNext());
+    }
+
+    /**
+     * 레시피 추천에 고를 재료를 찾는다 (기본 양념은 빠진다).
+     * 검색어가 없으면 이 냉장고에 있는 재료를, 있으면 이름에 검색어가 들어간 재료를 냉장고에 없는 것까지 돌려준다.
+     * "달걀"처럼 재료 사전의 별칭으로 찾아도 대표 이름("계란")이 맨 앞에 나온다.
+     */
+    public List<IngredientOptionResDto> searchIngredients(Long fridgeId, String keyword) {
+        FridgeAccessValidator.FridgeContext context = fridgeAccessValidator.validate(fridgeId);
+        OwnedIngredients owned = findOwnedIngredients(fridgeId, context);
+
+        List<Ingredient> ingredients;
+        if (keyword == null || keyword.isBlank()) {
+            if (owned.ownedIds().isEmpty()) {
+                return List.of();
+            }
+            ingredients = ingredientRepository.findAllById(owned.ownedIds()).stream()
+                    .sorted(Comparator.comparing(Ingredient::getName))
+                    .toList();
+        } else {
+            String pattern = toLikeKeyword(keyword);
+            Map<Long, Ingredient> found = new LinkedHashMap<>();
+            IngredientDictionary.Resolved resolved = dictionary.resolve(keyword.strip());
+            if (resolved.known() && !resolved.pantry()) {
+                ingredientRepository.findAllByNameIn(List.of(resolved.name()))
+                        .forEach(ingredient -> found.put(ingredient.getId(), ingredient));
+            }
+            ingredientRepository.searchByName(pattern, Limit.of(INGREDIENT_OPTION_SIZE))
+                    .forEach(ingredient -> found.putIfAbsent(ingredient.getId(), ingredient));
+            ingredients = found.values().stream().limit(INGREDIENT_OPTION_SIZE).toList();
+        }
+
+        return ingredients.stream()
+                .map(ingredient -> new IngredientOptionResDto(
+                        ingredient.getId(),
+                        ingredient.getName(),
+                        owned.ownedIds().contains(ingredient.getId()),
+                        owned.expiringIds().contains(ingredient.getId())))
+                .toList();
+    }
+
+    /**
+     * 고른 재료로 레시피를 추천한다. 냉장고에 없는 재료도 고를 수 있다 (사 올 재료로 무엇을 만들지 볼 때).
+     * 고른 재료를 많이 쓰는 레시피가 앞에 오고, 그다음은 고른 재료와 냉장고 재료 말고 더 필요한 재료가 적은 순이다.
+     * 기본 양념이나 없는 재료 id 는 무시한다.
+     */
+    public List<RecipePickResDto> recommendByIngredients(Long fridgeId, List<Long> ingredientIds, Integer size) {
+        int limit = normalizeSize(size);
+        Set<Long> requestedIds = normalizeSelectedIds(ingredientIds);
+        FridgeAccessValidator.FridgeContext context = fridgeAccessValidator.validate(fridgeId);
+
+        Set<Long> selectedIds = ingredientRepository.findAllById(requestedIds).stream()
+                .filter(ingredient -> !ingredient.isPantry())
+                .map(Ingredient::getId)
+                .collect(Collectors.toSet());
+        if (selectedIds.isEmpty()) {
+            return List.of();
+        }
+        OwnedIngredients owned = findOwnedIngredients(fridgeId, context);
+        Set<Long> availableIds = new HashSet<>(owned.ownedIds());
+        availableIds.addAll(selectedIds);
+
+        List<RecipePickMatch> matches = recipeIngredientRepository.findBySelectedIngredients(
+                selectedIds, availableIds, Limit.of(limit));
+        if (matches.isEmpty()) {
+            return List.of();
+        }
+        List<Long> recipeIds = matches.stream().map(RecipePickMatch::recipeId).toList();
+        Map<Long, Recipe> recipes = recipeRepository.findAllById(recipeIds).stream()
+                .collect(Collectors.toMap(Recipe::getId, Function.identity()));
+        Map<Long, List<RecipeIngredient>> ingredientsByRecipe = findIngredientsByRecipe(recipeIds);
+
+        return recipeIds.stream()
+                .map(id -> {
+                    List<RecipeIngredient> recipeIngredients = ingredientsByRecipe.getOrDefault(id, List.of());
+                    List<String> selectedNames = recipeIngredients.stream()
+                            .map(RecipeIngredient::getIngredient)
+                            .filter(ingredient -> selectedIds.contains(ingredient.getId()))
+                            .map(Ingredient::getName)
+                            .toList();
+                    return new RecipePickResDto(toDto(recipes.get(id), recipeIngredients, owned), selectedNames);
+                })
+                .toList();
+    }
+
+    private Map<Long, List<RecipeIngredient>> findIngredientsByRecipe(List<Long> recipeIds) {
         Map<Long, List<RecipeIngredient>> ingredientsByRecipe = new LinkedHashMap<>();
         for (RecipeIngredient ri : recipeIngredientRepository.findAllWithIngredientByRecipeIdIn(recipeIds)) {
             ingredientsByRecipe.computeIfAbsent(ri.getRecipe().getId(), id -> new ArrayList<>()).add(ri);
         }
-
-        return matches.stream()
-                .map(match -> toDto(match, recipes.get(match.recipeId()),
-                        ingredientsByRecipe.getOrDefault(match.recipeId(), List.of()), ownedIds, expiringIds))
-                .toList();
+        return ingredientsByRecipe;
     }
 
     /**
@@ -193,8 +318,45 @@ public class RecipeRecommendService {
         return size;
     }
 
-    private RecipeRecommendResDto toDto(RecipeMatch match, Recipe recipe, List<RecipeIngredient> recipeIngredients,
-                                        Set<Long> ownedIds, Set<Long> expiringIds) {
+    static int normalizePage(Integer page) {
+        if (page == null) {
+            return 0;
+        }
+        if (page < 0) {
+            throw new IllegalArgumentException("페이지 번호는 0 이상으로 입력해 주세요.");
+        }
+        return page;
+    }
+
+    /**
+     * 검색어를 LIKE 에 넣을 모양으로 바꾼다. 띄어쓰기를 빼고, %·_ 가 와일드카드로 쓰이지 않게 '!'로 이스케이프한다.
+     */
+    static String toLikeKeyword(String keyword) {
+        String compact = keyword == null ? "" : keyword.replaceAll("\\s+", "");
+        if (compact.isEmpty()) {
+            throw new IllegalArgumentException("검색어를 입력해 주세요.");
+        }
+        if (compact.length() > MAX_KEYWORD_LENGTH) {
+            throw new IllegalArgumentException("검색어는 " + MAX_KEYWORD_LENGTH + "자 이하로 입력해 주세요.");
+        }
+        return compact.replace("!", "!!").replace("%", "!%").replace("_", "!_");
+    }
+
+    static Set<Long> normalizeSelectedIds(List<Long> ingredientIds) {
+        Set<Long> ids = ingredientIds == null ? Set.of()
+                : ingredientIds.stream().filter(Objects::nonNull).collect(Collectors.toCollection(LinkedHashSet::new));
+        if (ids.isEmpty()) {
+            throw new IllegalArgumentException("재료를 하나 이상 골라 주세요.");
+        }
+        if (ids.size() > MAX_SELECTED_INGREDIENTS) {
+            throw new IllegalArgumentException("재료는 " + MAX_SELECTED_INGREDIENTS + "개까지 고를 수 있습니다.");
+        }
+        return ids;
+    }
+
+    private RecipeRecommendResDto toDto(Recipe recipe, List<RecipeIngredient> recipeIngredients, OwnedIngredients owned) {
+        Set<Long> ownedIds = owned.ownedIds();
+        Set<Long> expiringIds = owned.expiringIds();
         List<String> matched = new ArrayList<>();
         List<String> expiring = new ArrayList<>();
         List<RecipeRecommendResDto.MissingIngredient> missing = new ArrayList<>();
@@ -219,8 +381,8 @@ public class RecipeRecommendService {
                 recipe.getCookingMethod(),
                 recipe.getThumbnailUrl(),
                 recipe.getCalories(),
-                match.matchedCount(),
-                match.totalCount(),
+                matched.size(),
+                matched.size() + missing.size(),
                 matched,
                 missing,
                 expiring);
