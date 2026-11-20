@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.Limit;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.LinkedHashMap;
@@ -79,12 +81,79 @@ class RecipeIngredientRepositoryIntegrationTest {
         assertThat(result.get(0).missingCount()).isZero();
     }
 
+    @Test
+    void 고른_재료를_많이_쓰는_순_그다음_더_필요한_재료가_적은_순으로_찾는다() {
+        // 고른 재료 a, b (b 는 냉장고에 없다고 치고), 냉장고 재료 c
+        Long bothSelected = recipe(9_800_021L, a, b, d);          // 고른 2, 더 필요 1(d)
+        Long oneSelectedReady = recipe(9_800_022L, a, c);         // 고른 1, 더 필요 0
+        Long oneSelectedMissing = recipe(9_800_023L, b, d);       // 고른 1, 더 필요 1
+        Long notSelected = recipe(9_800_024L, c, d);              // 고른 0 → 빠짐
+        Long withPantry = recipe(9_800_025L, pantry, b);          // 양념은 세지 않아 고른 1, 더 필요 0
+        flushAndClear();
+
+        List<RecipePickMatch> result = recipeIngredientRepository.findBySelectedIngredients(
+                Set.of(a.getId(), b.getId()), Set.of(a.getId(), b.getId(), c.getId()), Limit.of(10));
+
+        // 실제 레시피 데이터는 이 테스트 재료를 쓰지 않으므로 여기서 만든 레시피만 나온다
+        assertThat(result)
+                .extracting(RecipePickMatch::recipeId, RecipePickMatch::selectedCount,
+                        RecipePickMatch::availableCount, RecipePickMatch::totalCount)
+                .containsExactly(
+                        tuple(bothSelected, 2L, 2L, 3L),
+                        tuple(oneSelectedReady, 1L, 2L, 2L),
+                        tuple(withPantry, 1L, 1L, 1L),
+                        tuple(oneSelectedMissing, 1L, 1L, 2L));
+        assertThat(result).extracting(RecipePickMatch::recipeId).doesNotContain(notSelected);
+    }
+
+    @Test
+    void 레시피_이름은_띄어쓰기를_무시하고_짧은_이름부터_찾는다() {
+        Long longer = recipe(9_800_031L, "검색테스트 김치 볶음밥", a);
+        Long shorter = recipe(9_800_032L, "검색테스트김치볶음밥", a);
+        recipe(9_800_033L, "검색테스트 된장찌개", a);
+        flushAndClear();
+
+        Slice<Recipe> first = recipeRepository.searchByName("검색테스트김치볶음", PageRequest.of(0, 1));
+        Slice<Recipe> second = recipeRepository.searchByName("검색테스트김치볶음", PageRequest.of(1, 1));
+
+        assertThat(first.getContent()).extracting(Recipe::getId).containsExactly(shorter);
+        assertThat(first.hasNext()).isTrue();
+        assertThat(second.getContent()).extracting(Recipe::getId).containsExactly(longer);
+        assertThat(second.hasNext()).isFalse();
+    }
+
+    @Test
+    void 레시피_이름_검색어의_퍼센트와_밑줄은_글자_그대로_찾는다() {
+        Long percent = recipe(9_800_041L, "검색테스트100%주스", a);
+        recipe(9_800_042L, "검색테스트1000주스", a);
+        flushAndClear();
+
+        Slice<Recipe> result = recipeRepository.searchByName("검색테스트100!%", PageRequest.of(0, 10));
+
+        assertThat(result.getContent()).extracting(Recipe::getId).containsExactly(percent);
+    }
+
+    @Test
+    void 재료_이름_검색은_기본_양념을_빼고_짧은_이름부터_찾는다() {
+        ingredient("추천테스트양념a", true);
+
+        List<Ingredient> result = ingredientRepository.searchByName("추천테스트", Limit.of(10));
+
+        assertThat(result).extracting(Ingredient::getName)
+                .startsWith("추천테스트재료a", "추천테스트재료b", "추천테스트재료c", "추천테스트재료d")
+                .doesNotContain("추천테스트양념", "추천테스트양념a");
+    }
+
     private Ingredient ingredient(String name, boolean isPantry) {
         return ingredientRepository.save(Ingredient.builder().name(name).pantry(isPantry).build());
     }
 
     private Long recipe(long sourceId, Ingredient... ingredients) {
-        Recipe recipe = Recipe.builder().sourceId(sourceId).name("추천 테스트 " + sourceId).build();
+        return recipe(sourceId, "추천 테스트 " + sourceId, ingredients);
+    }
+
+    private Long recipe(long sourceId, String name, Ingredient... ingredients) {
+        Recipe recipe = Recipe.builder().sourceId(sourceId).name(name).build();
         LinkedHashMap<Ingredient, String> amounts = new LinkedHashMap<>();
         for (Ingredient ingredient : ingredients) {
             amounts.put(ingredient, "1개");

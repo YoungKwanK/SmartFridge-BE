@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/fridge/{fridgeId}/recipes")
@@ -41,6 +43,45 @@ public class RecipeController {
                         .result(recipeAiRecommendService.recommend(fridgeId, size))
                         .status_code(HttpStatus.OK.value())
                         .status_message("AI 레시피 추천 완료")
+                        .build(), HttpStatus.OK);
+    }
+
+    // 고른 재료로 레시피 추천 (냉장고에 없는 재료도 고를 수 있다, 고른 재료를 많이 쓰는 순)
+    @GetMapping("/recommend/ingredients")
+    public ResponseEntity<?> recommendByIngredients(@PathVariable("fridgeId") Long fridgeId,
+                                                    @RequestParam(required = false) List<Long> ingredientIds,
+                                                    @RequestParam(required = false) Integer size) {
+        return new ResponseEntity<>(
+                CommonDto.builder()
+                        .result(recipeRecommendService.recommendByIngredients(fridgeId, ingredientIds, size))
+                        .status_code(HttpStatus.OK.value())
+                        .status_message("재료로 레시피 추천 완료")
+                        .build(), HttpStatus.OK);
+    }
+
+    // 레시피 이름 검색 (띄어쓰기 무시, 재료마다 이 냉장고에 있는지 표시)
+    @GetMapping("/search")
+    public ResponseEntity<?> search(@PathVariable("fridgeId") Long fridgeId,
+                                    @RequestParam(required = false) String keyword,
+                                    @RequestParam(required = false) Integer page,
+                                    @RequestParam(required = false) Integer size) {
+        return new ResponseEntity<>(
+                CommonDto.builder()
+                        .result(recipeRecommendService.search(fridgeId, keyword, page, size))
+                        .status_code(HttpStatus.OK.value())
+                        .status_message("레시피 검색 완료")
+                        .build(), HttpStatus.OK);
+    }
+
+    // 추천에 고를 재료 찾기 (검색어가 없으면 냉장고에 있는 재료)
+    @GetMapping("/ingredients")
+    public ResponseEntity<?> ingredients(@PathVariable("fridgeId") Long fridgeId,
+                                         @RequestParam(required = false) String keyword) {
+        return new ResponseEntity<>(
+                CommonDto.builder()
+                        .result(recipeRecommendService.searchIngredients(fridgeId, keyword))
+                        .status_code(HttpStatus.OK.value())
+                        .status_message("재료 조회 완료")
                         .build(), HttpStatus.OK);
     }
 
