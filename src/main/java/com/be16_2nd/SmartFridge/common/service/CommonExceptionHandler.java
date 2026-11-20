@@ -1,9 +1,11 @@
 package com.be16_2nd.SmartFridge.common.service;
 
 import com.be16_2nd.SmartFridge.agent.exception.AgentActionException;
+import com.be16_2nd.SmartFridge.agent.exception.AgentChatException;
 import com.be16_2nd.SmartFridge.common.ai.AiException;
 import com.be16_2nd.SmartFridge.common.dto.CommonErrorDto;
 import com.be16_2nd.SmartFridge.inquiry.exception.InquiryConflictException;
+import com.be16_2nd.SmartFridge.receipt.exception.ReceiptException;
 import com.be16_2nd.SmartFridge.recipe.service.RecipeImportInProgressException;
 import com.be16_2nd.SmartFridge.recipe.source.RecipeSourceException;
 import jakarta.persistence.EntityNotFoundException;
@@ -98,6 +100,20 @@ public class CommonExceptionHandler {
     @ExceptionHandler(AgentActionException.class)
     public ResponseEntity<?> agentActionException(AgentActionException e){
         log.error(e.getMessage());
+        return new ResponseEntity<>(new CommonErrorDto(e.getStatus().value(), e.getMessage()), e.getStatus());
+    }
+
+    // AI 도우미 채팅을 쓸 수 없는 상태: 하루 사용 횟수 초과(429)
+    @ExceptionHandler(AgentChatException.class)
+    public ResponseEntity<?> agentChatException(AgentChatException e){
+        log.error(e.getMessage());
+        return new ResponseEntity<>(new CommonErrorDto(e.getStatus().value(), e.getMessage()), e.getStatus());
+    }
+
+    // 영수증 인식을 쓸 수 없는 상태: 하루 사용 횟수 초과(429)
+    @ExceptionHandler(ReceiptException.class)
+    public ResponseEntity<?> receiptException(ReceiptException e){
+        log.warn(e.getMessage());
         return new ResponseEntity<>(new CommonErrorDto(e.getStatus().value(), e.getMessage()), e.getStatus());
     }
 

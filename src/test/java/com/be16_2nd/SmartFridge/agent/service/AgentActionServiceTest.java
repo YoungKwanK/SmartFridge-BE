@@ -31,6 +31,7 @@ import org.springframework.security.access.AccessDeniedException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -205,6 +206,27 @@ class AgentActionServiceTest {
                 .hasMessageContaining("15");
         verify(statusRecorder).markFailed(action.getId(), "식품을 찾을 수 없습니다. ID: [15]");
         assertThat(action.getStatus()).isEqualTo(AgentActionStatus.PENDING);
+    }
+
+    // ===== 지금 상태 =====
+
+    @Test
+    void 지금_상태는_시간이_지난_대기_제안과_기록이_없는_제안을_만료로_본다() {
+        AgentAction waiting = AgentAction.propose(fridgeId, me.getId(), AgentActionType.FINISH_CONSUMED, List.of(1L), LocalDateTime.now());
+        AgentAction stale = AgentAction.propose(fridgeId, me.getId(), AgentActionType.FINISH_CONSUMED, List.of(2L),
+                LocalDateTime.now().minusMinutes(11));
+        AgentAction done = AgentAction.propose(fridgeId, me.getId(), AgentActionType.FINISH_CONSUMED, List.of(3L), LocalDateTime.now());
+        done.confirm(LocalDateTime.now());
+        UUID missing = UUID.randomUUID();
+        List<UUID> ids = List.of(waiting.getId(), stale.getId(), done.getId(), missing);
+        when(agentActionRepository.findAllById(ids)).thenReturn(List.of(waiting, stale, done));
+
+        Map<UUID, AgentActionStatus> statuses = agentActionService.currentStatuses(ids);
+
+        assertThat(statuses).containsEntry(waiting.getId(), AgentActionStatus.PENDING)
+                .containsEntry(stale.getId(), AgentActionStatus.EXPIRED)
+                .containsEntry(done.getId(), AgentActionStatus.CONFIRMED)
+                .containsEntry(missing, AgentActionStatus.EXPIRED);
     }
 
     // ===== 취소 =====
