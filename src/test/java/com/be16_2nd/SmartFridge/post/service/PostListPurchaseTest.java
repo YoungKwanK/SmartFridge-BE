@@ -14,6 +14,7 @@ import com.be16_2nd.SmartFridge.post.domain.PostCategory;
 import com.be16_2nd.SmartFridge.post.dto.PostPurchaseDto;
 import com.be16_2nd.SmartFridge.post.dto.PostResDto;
 import com.be16_2nd.SmartFridge.post.dto.PostSearchDto;
+import com.be16_2nd.SmartFridge.post.repository.PostImageRepository;
 import com.be16_2nd.SmartFridge.post.repository.PostRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -49,6 +50,7 @@ class PostListPurchaseTest {
     @Mock PostRepository postRepository;
     @Mock PostStatsService postStatsService;
     @Mock PurchasePostRepository purchasePostRepository;
+    @Mock PostImageRepository postImageRepository;
 
     @InjectMocks PostService postService;
 

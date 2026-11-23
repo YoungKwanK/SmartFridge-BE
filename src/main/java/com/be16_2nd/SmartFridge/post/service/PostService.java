@@ -235,15 +235,28 @@ public class PostService {
         );
         Page<Post> postList = postRepository.findAll(finalSpec, sortedPageable);
         Map<Long, PurchasePost> purchaseByPostId = findPurchasesOf(postList.getContent());
+        Map<Long, String> thumbnailByPostId = findThumbnailsOf(postList.getContent());
         return postList.map(post -> {
             Long viewCount = postStatsService.getViewCount(post.getId());
             PostResDto postResDto = PostResDto.fromEntity(post, viewCount);
+            postResDto.setThumbnailUrl(thumbnailByPostId.get(post.getId()));
             PurchasePost purchasePost = purchaseByPostId.get(post.getId());
             if (purchasePost != null) {
                 postResDto.setPurchase(PostPurchaseDto.fromEntity(purchasePost, member));
             }
             return postResDto;
         });
+    }
+
+    // 목록에 있는 글의 대표 이미지(첫 번째 첨부 이미지)를 한 번에 찾는다 (글마다 이미지 목록을 불러오지 않게)
+    private Map<Long, String> findThumbnailsOf(List<Post> posts) {
+        if (posts.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> postIds = posts.stream().map(Post::getId).toList();
+        return postImageRepository.findThumbnailsByPostIds(postIds).stream()
+                .collect(Collectors.toMap(PostImageRepository.PostThumbnail::getPostId,
+                        PostImageRepository.PostThumbnail::getImageUrl));
     }
 
     // 목록에 있는 공동구매 글의 모집 정보를 한 번에 찾는다 (글마다 따로 조회하지 않게)
