@@ -1,5 +1,6 @@
 package com.be16_2nd.SmartFridge.member.service;
 
+import com.be16_2nd.SmartFridge.common.auth.AuthMember;
 import com.be16_2nd.SmartFridge.fridge.domain.FridgeMember;
 import com.be16_2nd.SmartFridge.fridge.domain.Type;
 import com.be16_2nd.SmartFridge.fridge.repository.FridgeMemberRepository;
@@ -106,15 +107,13 @@ public class MemberService {
 
     @Transactional(readOnly = true)
     public MemberResDto myInfo(){
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        Member member = memberRepository.findByEmail(email)
+        Member member = memberRepository.findById(AuthMember.currentId())
                 .orElseThrow(()->new EntityNotFoundException("member is not found"));
         return MemberResDto.fromEntity(member);
     }
 
     public void delete(){
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        Member member = memberRepository.findByEmail(email).orElseThrow(()->new EntityNotFoundException("존재하지 않는 회원입니다."));
+        Member member = memberRepository.findById(AuthMember.currentId()).orElseThrow(()->new EntityNotFoundException("존재하지 않는 회원입니다."));
         List<FridgeMember> fridgeMembers = fridgeMemberRepository.findAllByMember(member);
         for(FridgeMember fridgeMember : fridgeMembers){
             if (fridgeMember.getType().equals(Type.MANAGER)){
@@ -127,14 +126,12 @@ public class MemberService {
     }
 
     public Member getCurrentMember() {
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        return memberRepository.findByEmail(email)
+        return memberRepository.findById(AuthMember.currentId())
                 .orElseThrow(() -> new EntityNotFoundException("없는 사용자입니다."));
     }
 
     public List<MyPostResDto> myposts(){
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        Member member = memberRepository.findByEmail(email)
+        Member member = memberRepository.findById(AuthMember.currentId())
                 .orElseThrow(()->new EntityNotFoundException("회원을 찾을 수 없습니다."));
 
         List<Post> memberPost = postRepository.findAllByMemberId(member.getId());
@@ -145,8 +142,7 @@ public class MemberService {
     }
 
     public MyStatsDto mystats(){
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        Member member = memberRepository.findByEmail(email)
+        Member member = memberRepository.findById(AuthMember.currentId())
                 .orElseThrow(()->new EntityNotFoundException("회원을 찾을 수 없습니다."));
 
         Long postCount = postRepository.countByMemberId(member.getId());
@@ -160,8 +156,7 @@ public class MemberService {
                 .build();
     }
     public MemberResDto updateName(UpdateNameDto updateNameDto){
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        Member member = memberRepository.findByEmail(email)
+        Member member = memberRepository.findById(AuthMember.currentId())
                 .orElseThrow(()->new EntityNotFoundException("회원을 찾을 수 없습니다."));
         member.updateName(updateNameDto.getName());
         memberRepository.save(member);
@@ -169,8 +164,7 @@ public class MemberService {
     }
 
     public MemberResDto updateMyProfileImage(UpdateProfielImageDto updateProfielImageDto) throws IOException {
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        Member member = memberRepository.findByEmail(email)
+        Member member = memberRepository.findById(AuthMember.currentId())
                 .orElseThrow(()->new EntityNotFoundException("회원을 찾을 수 없습니다."));
 
         String profileImageUrl = s3Uploader.upload(updateProfielImageDto.getNewProfileImage());
@@ -182,8 +176,7 @@ public class MemberService {
     }
 
     public List<NotificationSettingDto> mySettings(){
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        Member member = memberRepository.findByEmail(email)
+        Member member = memberRepository.findById(AuthMember.currentId())
                 .orElseThrow(()->new EntityNotFoundException("가입되지 않은 이메일 입니다."));
         List<NotificationSetting> settings = notificationSettingRepository.findAllByMember(member);
         List<NotificationSettingDto> mySetting = settings.stream()

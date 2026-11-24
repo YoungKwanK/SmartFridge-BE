@@ -1,5 +1,7 @@
 package com.be16_2nd.SmartFridge.chat.config;
 
+import com.be16_2nd.SmartFridge.common.auth.AuthMember;
+
 import com.be16_2nd.SmartFridge.chat.domain.ChatRoomType;
 import com.be16_2nd.SmartFridge.chat.service.ChatPresence;
 import com.be16_2nd.SmartFridge.chat.service.Validator.ChatRoomParticipantValidator;
@@ -62,15 +64,15 @@ public class StompHandler implements ChannelInterceptor {
 
     private void connect(StompHeaderAccessor accessor) {
         Claims claims = tokenValidator.validateToken(accessor.getFirstNativeHeader("Authorization"));
-        String email = claims.getSubject();
+        // 세션 사용자 이름 = 회원 id(UUID 문자열). 이후 프레임과 presence 모두 이 값으로 회원을 구분한다
+        String memberId = AuthMember.parse(claims.getSubject()).toString();
         accessor.setUser(new UsernamePasswordAuthenticationToken(
-                email, null, List.of(new SimpleGrantedAuthority("ROLE_" + claims.get("role")))));
-        accessor.getSessionAttributes().put("email", email);
+                memberId, null, List.of(new SimpleGrantedAuthority("ROLE_" + claims.get("role")))));
         log.info("stomp connect 토큰 검증 완료");
     }
 
     private void subscribe(StompHeaderAccessor accessor) {
-        String email = requireUser(accessor);
+        String memberId = requireUser(accessor);
         Matcher matcher = SUBSCRIBE_DESTINATION.matcher(Objects.requireNonNullElse(accessor.getDestination(), ""));
         if (!matcher.matches() || accessor.getSubscriptionId() == null) {
             throw new AccessDeniedException("잘못된 구독 요청입니다.");
@@ -79,10 +81,10 @@ public class StompHandler implements ChannelInterceptor {
         Long roomId = Long.parseLong(matcher.group(2));
 
         // 채팅방 참여자 확인
-        chatRoomParticipantValidator.validateParticipant(email, roomId, roomType);
+        chatRoomParticipantValidator.validateParticipant(AuthMember.parse(memberId), roomId, roomType);
         // 지금 채팅방을 보고 있는 사용자에 추가
         chatPresence.subscribe(accessor.getSessionAttributes(), accessor.getSessionId(), accessor.getSubscriptionId(),
-                roomType, roomId, email);
+                roomType, roomId, memberId);
     }
 
     // 구독 해제: 구독 id로 방을 찾아 지금 보고 있는 사용자에서 제거 (연결 종료는 StompEventListener)

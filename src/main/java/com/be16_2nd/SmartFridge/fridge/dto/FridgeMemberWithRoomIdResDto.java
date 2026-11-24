@@ -1,5 +1,7 @@
 package com.be16_2nd.SmartFridge.fridge.dto;
 
+import java.util.UUID;
+
 import com.be16_2nd.SmartFridge.fridge.domain.FridgeMember;
 import com.be16_2nd.SmartFridge.fridge.domain.Type;
 import lombok.AllArgsConstructor;
@@ -15,7 +17,7 @@ import java.time.LocalDateTime;
 @Builder
 public class FridgeMemberWithRoomIdResDto {
     private Long fridgeId;
-    private String memberEmail;
+    private UUID memberId;
     private String memberName;
     private String memberProfileImage;
     private Type type;
@@ -26,7 +28,7 @@ public class FridgeMemberWithRoomIdResDto {
     public static FridgeMemberWithRoomIdResDto fromEntity(FridgeMember fridgeMember, Long roomId, Long unReadCount){
         return FridgeMemberWithRoomIdResDto.builder()
                 .fridgeId(fridgeMember.getFridge().getId())
-                .memberEmail(fridgeMember.getMember().getEmail())
+                .memberId(fridgeMember.getMember().getId())
                 .memberName(fridgeMember.getMember().getName())
                 .memberProfileImage(fridgeMember.getMember().getProfileImage())
                 .type(fridgeMember.getType())

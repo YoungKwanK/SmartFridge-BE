@@ -61,7 +61,7 @@ class InquiryImageUpdateTest {
             inquiry.getInquiryImages().add(InquiryImage.builder().imageUrl(url).inquiry(inquiry).build());
         }
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(owner.getEmail(), null, List.of()));
+                new UsernamePasswordAuthenticationToken(owner.getId().toString(), null, List.of()));
     }
 
     @AfterEach
@@ -176,7 +176,7 @@ class InquiryImageUpdateTest {
 
     private void givenInquiry() {
         when(inquiryRepository.findById(inquiryId)).thenReturn(Optional.of(inquiry));
-        when(memberRepository.findByEmail(owner.getEmail())).thenReturn(Optional.of(owner));
+        when(memberRepository.findById(owner.getId())).thenReturn(Optional.of(owner));
     }
 
     private InquiryUpdateDto updateDto(String removedImageIndexes) {

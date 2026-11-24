@@ -1,5 +1,9 @@
 package com.be16_2nd.SmartFridge.chat.service;
 
+import com.be16_2nd.SmartFridge.member.repository.MemberRepository;
+
+import java.util.UUID;
+
 import com.be16_2nd.SmartFridge.post.service.PostService;
 import com.be16_2nd.SmartFridge.support.PurchaseRoomFixture;
 import com.be16_2nd.SmartFridge.chat.repository.PurchasePostRepository;
@@ -34,6 +38,7 @@ class ChatPurchaseJoinConcurrencyTest {
     static final int MAX_PARTICIPANTS = 3; // 개설자 포함
 
     @Autowired MemberService memberService;
+    @Autowired MemberRepository memberRepository;
     @Autowired FridgeService fridgeService;
     @Autowired FridgeRepository fridgeRepository;
     @Autowired ChatService chatService;
@@ -108,6 +113,11 @@ class ChatPurchaseJoinConcurrencyTest {
 
     private void login(String email) {
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(email, null, List.of()));
+                new UsernamePasswordAuthenticationToken(idOf(email).toString(), null, List.of()));
+    }
+
+    // 테스트 회원의 id (principal 이름·채팅 식별자는 회원 id)
+    private UUID idOf(String email) {
+        return memberRepository.findByEmail(email).orElseThrow().getId();
     }
 }

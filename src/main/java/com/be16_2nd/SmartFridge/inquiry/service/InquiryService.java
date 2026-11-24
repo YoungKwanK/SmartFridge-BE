@@ -1,5 +1,6 @@
 package com.be16_2nd.SmartFridge.inquiry.service;
 
+import com.be16_2nd.SmartFridge.common.auth.AuthMember;
 import com.be16_2nd.SmartFridge.common.service.FridgeAccessValidator;
 import com.be16_2nd.SmartFridge.common.service.S3Uploader;
 import com.be16_2nd.SmartFridge.fridge.domain.Fridge;
@@ -43,8 +44,7 @@ public class InquiryService {
 
     public Long create(InquiryCreateDto inquiryCreateDto) {
 
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        Member sender = memberRepository.findByEmail(email)
+        Member sender = memberRepository.findById(AuthMember.currentId())
                 .orElseThrow(()-> new EntityNotFoundException("등록되지 않은 사용자입니다."));
         Member receiver = adminAccountProvider.getAdmin();
 
@@ -68,8 +68,7 @@ public class InquiryService {
 
     @Transactional(readOnly = true)
     public List<InquiryResDto> findMyInquiry(){
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        Member member = memberRepository.findByEmail(email).orElseThrow(()->new EntityNotFoundException("존재하지 않는 사용자 입니다"));
+        Member member = memberRepository.findById(AuthMember.currentId()).orElseThrow(()->new EntityNotFoundException("존재하지 않는 사용자 입니다"));
         return inquiryRepository.findAllByMember(member).stream()
                 .map(i-> InquiryResDto.fromEntity(i)).collect(Collectors.toList());
     }
@@ -120,8 +119,7 @@ public class InquiryService {
     }
 
     private void validateOwner(Inquiry inquiry, String message) {
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        Member member = memberRepository.findByEmail(email).orElseThrow(()->new EntityNotFoundException("존재하지 않는 사용자입니다."));
+        Member member = memberRepository.findById(AuthMember.currentId()).orElseThrow(()->new EntityNotFoundException("존재하지 않는 사용자입니다."));
         if (!inquiry.isOwner(member)) {
             throw new AccessDeniedException(message);
         }

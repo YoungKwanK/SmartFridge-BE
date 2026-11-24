@@ -9,6 +9,8 @@ import org.springframework.data.redis.core.RedisTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.util.UUID;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -23,22 +25,26 @@ class NotificationPublisherRoomIdTest {
     @Mock RedisTemplate<String, String> redisTemplate;
 
     final JsonMapper objectMapper = JsonMapper.builder().build();
+    static final UUID RECEIVER = UUID.fromString("00000000-0000-0000-0000-0000000000aa");
 
     @Test
     void 채팅_알림에는_방_id를_싣는다() {
         new NotificationPublisher(redisTemplate, objectMapper)
-                .publish(7L, "receiver@test.com", "새 채팅", "GROUP_CHAT", 42L);
+                .publish(7L, RECEIVER, "새 채팅", "GROUP_CHAT", 42L);
 
         JsonNode payload = publishedPayload();
         assertThat(payload.get("type").asString()).isEqualTo("GROUP_CHAT");
         assertThat(payload.get("fridgeId").asLong()).isEqualTo(7L);
         assertThat(payload.get("roomId").asLong()).isEqualTo(42L);
+        // 수신자는 회원 id로만 구분하고 이메일은 싣지 않는다
+        assertThat(payload.get("receiverId").asString()).isEqualTo(RECEIVER.toString());
+        assertThat(payload.has("receiverEmail")).isFalse();
     }
 
     @Test
     void 채팅이_아닌_알림은_방_id가_없다() {
         new NotificationPublisher(redisTemplate, objectMapper)
-                .publish(7L, "receiver@test.com", "새 문의", "NEW_INQUIRY");
+                .publish(7L, RECEIVER, "새 문의", "NEW_INQUIRY");
 
         assertThat(publishedPayload().get("roomId").isNull()).isTrue();
     }

@@ -1,5 +1,6 @@
 package com.be16_2nd.SmartFridge.fridge.service;
 
+import com.be16_2nd.SmartFridge.common.auth.AuthMember;
 import com.be16_2nd.SmartFridge.post.repository.PostRepository;
 import com.be16_2nd.SmartFridge.chat.domain.ChatRoom;
 import com.be16_2nd.SmartFridge.chat.service.ChatImageCleanup;
@@ -60,8 +61,7 @@ public class FridgeService {
     // 냉장고 + 관리자 멤버 + 관리자 1대1 채팅방을 한 트랜잭션으로 생성
     @Transactional
     public FridgeCreateResDto create(FridgeCreateDto fridgeCreateDto){
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        Member member = memberRepository.findByEmail(email).orElseThrow(()->new EntityNotFoundException("member is not found"));
+        Member member = memberRepository.findById(AuthMember.currentId()).orElseThrow(()->new EntityNotFoundException("member is not found"));
         boolean exists = fridgeRepository.existsByFridgeNameAndFridgeMemberList_Member(
                 fridgeCreateDto.getFridgeName(), member);
         if (exists) {
@@ -137,8 +137,7 @@ public class FridgeService {
 
     @Transactional(readOnly = true)
     public List<FridgeListDto> findMyFridges() {
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        Member member = memberRepository.findByEmail(email)
+        Member member = memberRepository.findById(AuthMember.currentId())
                 .orElseThrow(() -> new EntityNotFoundException("member is not found"));
 
         List<FridgeMember> fridgeMembers = fridgeMemberRepository.findAllByMember(member);
@@ -152,8 +151,7 @@ public class FridgeService {
     // 냉장고 멤버 추가 + 1대1 채팅방 생성 + 관리자 알림 저장을 한 트랜잭션으로 (중간에 실패하면 모두 취소)
     @Transactional
     public Long joinFridge(String inviteCode){
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        Member member = memberRepository.findByEmail(email)
+        Member member = memberRepository.findById(AuthMember.currentId())
                 .orElseThrow(() -> new EntityNotFoundException("사용자를 찾을 수 없습니다."));
 
         Fridge fridge = fridgeRepository.findByInviteCode(inviteCode)
@@ -211,7 +209,7 @@ public class FridgeService {
     }
 
     @Transactional
-    public void delegateManager(Long fridgeId, String memberEmail) {
+    public void delegateManager(Long fridgeId, UUID memberId) {
         FridgeAccessValidator.FridgeContext context = fridgeAccessValidator.validate(fridgeId);
         if (context.type() != Type.MANAGER) {
             throw new AccessDeniedException("오직 MANAGER만 권한을 위임할 수 있습니다.");
@@ -219,7 +217,7 @@ public class FridgeService {
         Fridge fridge = context.fridge();
         Member currentManager = context.member();
 
-        Member newManager = memberRepository.findByEmail(memberEmail)
+        Member newManager = memberRepository.findById(memberId)
                 .orElseThrow(() -> new EntityNotFoundException("새로운 매니저로 지정할 사용자를 찾을 수 없습니다."));
 
         FridgeMember currentFridgeManager = fridgeMemberRepository.findByFridgeAndMember(fridge, currentManager)
@@ -235,20 +233,20 @@ public class FridgeService {
     }
 
     @Transactional
-    public void removeMember(Long fridgeId, String memberEmail) {
+    public void removeMember(Long fridgeId, UUID memberId) {
         FridgeAccessValidator.FridgeContext context = fridgeAccessValidator.validate(fridgeId);
 
         if (context.type() != Type.MANAGER) {
             throw new AccessDeniedException("오직 MANAGER만 멤버를 삭제할 수 있습니다.");
         }
 
-        if (context.member().getEmail().equals(memberEmail)) {
+        if (context.member().getId().equals(memberId)) {
             throw new IllegalArgumentException("MANAGER는 자기 자신을 삭제할 수 없습니다.");
         }
 
         Fridge fridge = context.fridge();
 
-        Member memberToDelete = memberRepository.findByEmail(memberEmail)
+        Member memberToDelete = memberRepository.findById(memberId)
                 .orElseThrow(() -> new EntityNotFoundException("삭제할 사용자를 찾을 수 없습니다."));
 
         FridgeMember fridgeMemberToDelete = fridgeMemberRepository.findByFridgeAndMember(fridge, memberToDelete)
@@ -258,7 +256,7 @@ public class FridgeService {
         // 나가기와 같은 규칙: 강퇴된 멤버의 식품은 등록자 없음 + 공유 식품으로 남김
         foodRepository.releaseAllByFridgeAndMember(fridge, memberToDelete);
         managerChatRoomLifecycle.deleteManagerChatRoom(memberToDelete, fridge);
-        chatService.leaveForcePurchaseChatRoom(fridgeId, memberEmail);
+        chatService.leaveForcePurchaseChatRoom(fridgeId, memberId);
     }
 
     @Transactional

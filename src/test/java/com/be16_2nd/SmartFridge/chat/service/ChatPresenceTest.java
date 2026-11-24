@@ -1,5 +1,9 @@
 package com.be16_2nd.SmartFridge.chat.service;
 
+import com.be16_2nd.SmartFridge.member.repository.MemberRepository;
+
+import java.util.UUID;
+
 import com.be16_2nd.SmartFridge.post.service.PostService;
 import com.be16_2nd.SmartFridge.chat.repository.PurchasePostRepository;
 import com.be16_2nd.SmartFridge.support.PurchaseRoomFixture;
@@ -7,7 +11,7 @@ import com.be16_2nd.SmartFridge.chat.config.StompEventListener;
 import com.be16_2nd.SmartFridge.chat.domain.ChatParticipant;
 import com.be16_2nd.SmartFridge.chat.domain.ChatRoomType;
 import com.be16_2nd.SmartFridge.chat.dto.ChatMessageDto;
-import com.be16_2nd.SmartFridge.chat.dto.ChatMessageEmailDto;
+import com.be16_2nd.SmartFridge.chat.dto.ChatMessageReceiversDto;
 import com.be16_2nd.SmartFridge.chat.repository.ChatRoomRepository;
 import com.be16_2nd.SmartFridge.fridge.dto.FridgeCreateDto;
 import com.be16_2nd.SmartFridge.fridge.repository.FridgeRepository;
@@ -44,8 +48,12 @@ class ChatPresenceTest {
     // DB에 없는 방 id (Redis만 쓰는 테스트용)
     static final long ROOM_1 = 990_001L;
     static final long ROOM_2 = 990_002L;
+    // DB에 없는 회원 id (Redis만 쓰는 테스트용)
+    static final UUID A = UUID.fromString("00000000-0000-0000-0000-00000000000a");
+    static final UUID B = UUID.fromString("00000000-0000-0000-0000-00000000000b");
 
     @Autowired ChatPresence chatPresence;
+    @Autowired MemberRepository memberRepository;
     @Autowired StompEventListener stompEventListener;
     @Autowired @Qualifier("chatPubSub") StringRedisTemplate redisTemplate;
     @Autowired MemberService memberService;
@@ -70,28 +78,28 @@ class ChatPresenceTest {
     void 같은_사용자가_탭_두개로_보다가_하나를_닫아도_접속_중으로_남는다() {
         Map<String, Object> tab1 = new HashMap<>();
         Map<String, Object> tab2 = new HashMap<>();
-        chatPresence.subscribe(tab1, "s1", "sub-0", ChatRoomType.PURCHASE, ROOM_1, "a@p.com");
-        chatPresence.subscribe(tab2, "s2", "sub-0", ChatRoomType.PURCHASE, ROOM_1, "a@p.com");
+        chatPresence.subscribe(tab1, "s1", "sub-0", ChatRoomType.PURCHASE, ROOM_1, A.toString());
+        chatPresence.subscribe(tab2, "s2", "sub-0", ChatRoomType.PURCHASE, ROOM_1, A.toString());
 
         chatPresence.unsubscribe(tab1, "s1", "sub-0");
-        assertThat(chatPresence.onlineEmails(ChatRoomType.PURCHASE, ROOM_1)).containsExactly("a@p.com");
+        assertThat(chatPresence.onlineMemberIds(ChatRoomType.PURCHASE, ROOM_1)).containsExactly(A);
 
         chatPresence.unsubscribe(tab2, "s2", "sub-0");
-        assertThat(chatPresence.onlineEmails(ChatRoomType.PURCHASE, ROOM_1)).isEmpty();
+        assertThat(chatPresence.onlineMemberIds(ChatRoomType.PURCHASE, ROOM_1)).isEmpty();
     }
 
     @Test
     void 연결이_끊기면_그_연결의_모든_구독이_정리된다() {
         Map<String, Object> session = new HashMap<>();
-        chatPresence.subscribe(session, "s1", "sub-0", ChatRoomType.PURCHASE, ROOM_1, "a@p.com");
-        chatPresence.subscribe(session, "s1", "sub-1", ChatRoomType.MANAGER, ROOM_2, "a@p.com");
-        chatPresence.subscribe(new HashMap<>(), "s2", "sub-0", ChatRoomType.PURCHASE, ROOM_1, "b@p.com");
+        chatPresence.subscribe(session, "s1", "sub-0", ChatRoomType.PURCHASE, ROOM_1, A.toString());
+        chatPresence.subscribe(session, "s1", "sub-1", ChatRoomType.MANAGER, ROOM_2, A.toString());
+        chatPresence.subscribe(new HashMap<>(), "s2", "sub-0", ChatRoomType.PURCHASE, ROOM_1, B.toString());
 
         // DISCONNECT 프레임 없이 끊긴 경우에도 Spring이 보내는 이벤트
         stompEventListener.disconnectHandle(disconnectEvent("s1", session));
 
-        assertThat(chatPresence.onlineEmails(ChatRoomType.PURCHASE, ROOM_1)).containsExactly("b@p.com");
-        assertThat(chatPresence.onlineEmails(ChatRoomType.MANAGER, ROOM_2)).isEmpty();
+        assertThat(chatPresence.onlineMemberIds(ChatRoomType.PURCHASE, ROOM_1)).containsExactly(B);
+        assertThat(chatPresence.onlineMemberIds(ChatRoomType.MANAGER, ROOM_2)).isEmpty();
     }
 
     @Test
@@ -104,7 +112,7 @@ class ChatPresenceTest {
 
     @Test
     void 방에_입장할_때_TTL이_설정된다() {
-        chatPresence.subscribe(new HashMap<>(), "s1", "sub-0", ChatRoomType.PURCHASE, ROOM_1, "a@p.com");
+        chatPresence.subscribe(new HashMap<>(), "s1", "sub-0", ChatRoomType.PURCHASE, ROOM_1, A.toString());
 
         Long ttl = redisTemplate.getExpire(ChatPresence.key(ChatRoomType.PURCHASE, ROOM_1));
         assertThat(ttl).isPositive().isLessThanOrEqualTo(ChatPresence.TTL.toSeconds());
@@ -127,8 +135,8 @@ class ChatPresenceTest {
         }
 
         // b만 방을 보고 있다
-        chatPresence.subscribe(new HashMap<>(), "s-b", "sub-0", ChatRoomType.PURCHASE, roomId, "b@p.com");
-        Long messageId = chatService.saveMessage(roomId, ChatRoomType.PURCHASE, "a@p.com",
+        chatPresence.subscribe(new HashMap<>(), "s-b", "sub-0", ChatRoomType.PURCHASE, roomId, idOf("b@p.com").toString());
+        Long messageId = chatService.saveMessage(roomId, ChatRoomType.PURCHASE, idOf("a@p.com"),
                 ChatMessageDto.builder().message("안녕").build()).getId();
 
         Map<String, Long> cursors = new HashMap<>();
@@ -157,11 +165,11 @@ class ChatPresenceTest {
         }
 
         // b만 방을 보고 있다 → 알림은 c에게만
-        chatPresence.subscribe(new HashMap<>(), "s-b", "sub-0", ChatRoomType.PURCHASE, roomId, "b@n.com");
-        ChatMessageEmailDto result = chatService.saveMessageWithEmails(chatService.saveMessage(
-                roomId, ChatRoomType.PURCHASE, "a@n.com", ChatMessageDto.builder().message("안녕").build()));
+        chatPresence.subscribe(new HashMap<>(), "s-b", "sub-0", ChatRoomType.PURCHASE, roomId, idOf("b@n.com").toString());
+        ChatMessageReceiversDto result = chatService.findNotificationReceivers(chatService.saveMessage(
+                roomId, ChatRoomType.PURCHASE, idOf("a@n.com"), ChatMessageDto.builder().message("안녕").build()));
 
-        assertThat(result.receiverEmailList()).containsExactly("c@n.com");
+        assertThat(result.receiverIds()).containsExactly(idOf("c@n.com"));
     }
 
     private SessionDisconnectEvent disconnectEvent(String sessionId, Map<String, Object> sessionAttributes) {
@@ -174,6 +182,11 @@ class ChatPresenceTest {
 
     private void login(String email) {
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(email, null, List.of()));
+                new UsernamePasswordAuthenticationToken(idOf(email).toString(), null, List.of()));
+    }
+
+    // 테스트 회원의 id (principal 이름·채팅 식별자는 회원 id)
+    private UUID idOf(String email) {
+        return memberRepository.findByEmail(email).orElseThrow().getId();
     }
 }

@@ -1,5 +1,6 @@
 package com.be16_2nd.SmartFridge.post.service;
 
+import com.be16_2nd.SmartFridge.common.auth.AuthMember;
 import com.be16_2nd.SmartFridge.chat.domain.PurchasePost;
 import com.be16_2nd.SmartFridge.chat.repository.PurchasePostRepository;
 import com.be16_2nd.SmartFridge.chat.service.ChatService;
@@ -117,8 +118,7 @@ public class PostService {
             throw new AccessDeniedException("해당 냉장고에 속한 게시글이 아닙니다.");
         }
 
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        Member member = memberRepository.findByEmail(email).orElseThrow(() -> new EntityNotFoundException("없는 사용자 입니다."));
+        Member member = memberRepository.findById(AuthMember.currentId()).orElseThrow(() -> new EntityNotFoundException("없는 사용자 입니다."));
 
         if (!post.getMember().getId().equals(member.getId())) {
             throw new AccessDeniedException("수정 권한이 없습니다.");
@@ -165,7 +165,7 @@ public class PostService {
         }
 
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        Member member = memberRepository.findByEmail(authentication.getName()).orElseThrow(() -> new EntityNotFoundException("없는 사용자 입니다."));
+        Member member = memberRepository.findById(AuthMember.parse(authentication.getName())).orElseThrow(() -> new EntityNotFoundException("없는 사용자 입니다."));
 
         if (!post.getMember().getId().equals(member.getId())) {
             throw new AccessDeniedException("삭제 권한이 없습니다.");

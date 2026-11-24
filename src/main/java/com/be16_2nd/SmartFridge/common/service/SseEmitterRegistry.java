@@ -14,18 +14,18 @@ public class SseEmitterRegistry {
 
     private Map<String, SseEmitter> emitterMap = new ConcurrentHashMap<>();
 
-    public void addSseEmitter(String email, SseEmitter sseEmitter) {
-        emitterMap.put(email, sseEmitter);
+    public void addSseEmitter(String memberId, SseEmitter sseEmitter) {
+        emitterMap.put(memberId, sseEmitter);
         log.info("emitter 등록됨: {}", emitterMap);
-        log.info("emitter 등록됨: {}", email);
+        log.info("emitter 등록됨: {}", memberId);
     }
 
-    public void removeEmitter(String email) {
-        emitterMap.remove(email);
+    public void removeEmitter(String memberId) {
+        emitterMap.remove(memberId);
     }
 
-    public SseEmitter getEmitter(String email) {
-        return emitterMap.get(email);
+    public SseEmitter getEmitter(String memberId) {
+        return emitterMap.get(memberId);
     }
 
     public Set<String> getAllKeys() {

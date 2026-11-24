@@ -1,5 +1,7 @@
 package com.be16_2nd.SmartFridge.chat.service;
 
+import com.be16_2nd.SmartFridge.member.repository.MemberRepository;
+
 import com.be16_2nd.SmartFridge.chat.domain.ChatRoomType;
 import com.be16_2nd.SmartFridge.chat.dto.ChatMessageDto;
 import com.be16_2nd.SmartFridge.chat.repository.PurchasePostRepository;
@@ -40,6 +42,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ChatHistoryQueryCountTest {
 
     @Autowired MemberService memberService;
+    @Autowired MemberRepository memberRepository;
     @Autowired FridgeService fridgeService;
     @Autowired FridgeRepository fridgeRepository;
     @Autowired ChatService chatService;
@@ -93,8 +96,8 @@ class ChatHistoryQueryCountTest {
         Page<ChatMessageDto> page = chatService.getChatHistory(ChatRoomType.PURCHASE, roomId, latestFirst());
 
         assertThat(page.getTotalElements()).isEqualTo(2);
-        assertThat(page.getContent()).extracting(ChatMessageDto::getSenderEmail)
-                .containsExactly("member1@h.com", "member0@h.com");
+        assertThat(page.getContent()).extracting(ChatMessageDto::getSenderId)
+                .containsExactly(idOf("member1@h.com"), idOf("member0@h.com"));
         assertThat(page.getContent()).allSatisfy(dto -> {
             assertThat(dto.getSenderName()).startsWith("회원");
             assertThat(dto.getImageUrls()).hasSize(2);
@@ -113,7 +116,7 @@ class ChatHistoryQueryCountTest {
             fridgeService.joinFridge(inviteCode);
             chatService.addParticipantToPurchaseChat(roomId);
             String name = UUID.randomUUID().toString();
-            chatService.saveMessage(roomId, ChatRoomType.PURCHASE, email, ChatMessageDto.builder()
+            chatService.saveMessage(roomId, ChatRoomType.PURCHASE, idOf(email), ChatMessageDto.builder()
                     .message("사진")
                     .imageUrls(List.of(imageUrl(name + "-0.jpg"), imageUrl(name + "-1.jpg")))
                     .build());
@@ -141,6 +144,11 @@ class ChatHistoryQueryCountTest {
 
     private void login(String email) {
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(email, null, List.of()));
+                new UsernamePasswordAuthenticationToken(idOf(email).toString(), null, List.of()));
+    }
+
+    // 테스트 회원의 id (principal 이름·채팅 식별자는 회원 id)
+    private UUID idOf(String email) {
+        return memberRepository.findByEmail(email).orElseThrow().getId();
     }
 }

@@ -1,5 +1,7 @@
 package com.be16_2nd.SmartFridge.chat.service;
 
+import java.util.UUID;
+
 import com.be16_2nd.SmartFridge.chat.domain.ChatRoomType;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -17,7 +19,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /*
  * 지금 채팅방을 보고 있는 사용자 (서버 여러 대가 공유하도록 Redis에 저장)
  * - key   : chat:presence:{TYPE}:{roomId}  (Hash)
- * - field : {STOMP sessionId}:{subscriptionId}  -> value : 회원 이메일
+ * - field : {STOMP sessionId}:{subscriptionId}  -> value : 회원 id(UUID 문자열)
  *   구독 단위로 저장하므로, 같은 사용자가 탭 두 개로 보다가 하나를 닫아도 나머지 탭 기준으로 계속 접속 중이다
  * - 서버가 비정상 종료되면 DISCONNECT가 오지 않아 항목이 남으므로, 방 key에 TTL을 두고 입장할 때마다 갱신한다
  */
@@ -36,9 +38,9 @@ public class ChatPresence {
 
     // 구독 시작: Redis에 기록하고, 연결(세션) 속성에 구독 id -> 방 정보를 남긴다
     public void subscribe(Map<String, Object> sessionAttributes, String sessionId, String subscriptionId,
-                          ChatRoomType type, Long roomId, String email) {
+                          ChatRoomType type, Long roomId, String memberId) {
         String key = key(type, roomId);
-        redisTemplate.opsForHash().put(key, field(sessionId, subscriptionId), email);
+        redisTemplate.opsForHash().put(key, field(sessionId, subscriptionId), memberId);
         redisTemplate.expire(key, TTL);
         subscriptions(sessionAttributes).put(subscriptionId, new Room(type, roomId));
     }
@@ -61,21 +63,26 @@ public class ChatPresence {
         }
     }
 
-    public Set<String> onlineEmails(ChatRoomType type, Long roomId) {
-        Set<String> emails = new HashSet<>();
+    // 지금 채팅방을 보고 있는 회원 id
+    public Set<UUID> onlineMemberIds(ChatRoomType type, Long roomId) {
+        Set<UUID> memberIds = new HashSet<>();
         for (Object value : redisTemplate.opsForHash().values(key(type, roomId))) {
-            emails.add((String) value);
+            try {
+                memberIds.add(UUID.fromString((String) value));
+            } catch (IllegalArgumentException e) {
+                // 이메일로 저장하던 이전 항목은 무시 (방 key TTL 로 사라진다)
+            }
         }
-        return emails;
+        return memberIds;
     }
 
     // 채팅방에서 빠진 회원의 구독을 지우고 지운 구독 목록을 돌려준다 (브로커 구독 해제는 ChatSubscriptionRevoker)
-    public List<Subscription> removeSubscriptions(ChatRoomType type, Long roomId, String email) {
+    public List<Subscription> removeSubscriptions(ChatRoomType type, Long roomId, UUID memberId) {
         String key = key(type, roomId);
         List<Subscription> removed = new ArrayList<>();
         for (Map.Entry<Object, Object> entry : redisTemplate.opsForHash().entries(key).entrySet()) {
             Subscription subscription = Subscription.parse((String) entry.getKey());
-            if (subscription != null && Objects.equals(entry.getValue(), email)) {
+            if (subscription != null && Objects.equals(entry.getValue(), memberId.toString())) {
                 removed.add(subscription);
             }
         }

@@ -1,5 +1,6 @@
 package com.be16_2nd.SmartFridge.chat.service;
 
+import com.be16_2nd.SmartFridge.common.auth.AuthMember;
 import com.be16_2nd.SmartFridge.chat.domain.*;
 import com.be16_2nd.SmartFridge.chat.dto.*;
 import com.be16_2nd.SmartFridge.chat.repository.*;
@@ -59,15 +60,15 @@ public class ChatService {
     private final ChatImageCleanup chatImageCleanup;
 
     // 메시지 저장 (1대1 / 공동구매 공통)
-    // senderEmail 은 인증된 세션 사용자여야 한다 (클라이언트가 보낸 값 사용 금지)
-    public ChatMessage saveMessage(Long roomId, ChatRoomType chatRoomType, String senderEmail, ChatMessageDto chatMessageDto) {
+    // senderId 는 인증된 세션 사용자여야 한다 (클라이언트가 보낸 값 사용 금지)
+    public ChatMessage saveMessage(Long roomId, ChatRoomType chatRoomType, UUID senderId, ChatMessageDto chatMessageDto) {
         // 방 행을 먼저 배타 잠금으로 잡아 같은 방의 메시지 저장을 한 건씩 처리한다
         // 잠그지 않으면 메시지 INSERT(FK 확인)가 방 행에 공유 잠금을 잡고, 이어지는 last_message_at UPDATE가
         // 배타 잠금으로 올리려다 동시에 보낸 다른 트랜잭션과 서로 기다려 교착 상태(1213)로 메시지가 사라진다
         // (잠금이 이 트랜잭션의 첫 조회여야 이후 조회가 앞선 메시지의 읽음 커서를 본다)
         ChatRoom chatRoom = chatRoomRepository.findByIdAndTypeForUpdate(roomId, chatRoomType)
                 .orElseThrow(() -> new EntityNotFoundException("room cannot find"));
-        Member sender = chatRoomParticipantValidator.validateParticipant(senderEmail, roomId, chatRoomType).getMember();
+        Member sender = chatRoomParticipantValidator.validateParticipant(senderId, roomId, chatRoomType).getMember();
 
         List<String> imageUrls = Optional.ofNullable(chatMessageDto.getImageUrls()).orElse(List.of());
         validateContents(chatMessageDto.getMessage(), imageUrls);
@@ -84,10 +85,10 @@ public class ChatService {
         chatRoom.updateLastMessageAt(chatMessage.getCreatedTime());
 
         // 보낸 사람과, 지금 채팅방을 보고 있는 참여자는 읽음 처리
-        Set<String> online = chatPresence.onlineEmails(chatRoomType, roomId);
+        Set<UUID> online = chatPresence.onlineMemberIds(chatRoomType, roomId);
         for (ChatParticipant participant : chatRoom.getParticipants()) {
-            String email = participant.getMember().getEmail();
-            if (email.equals(sender.getEmail()) || online.contains(email)) {
+            UUID memberId = participant.getMember().getId();
+            if (memberId.equals(sender.getId()) || online.contains(memberId)) {
                 participant.readUpTo(chatMessage.getId());
             }
         }
@@ -106,15 +107,15 @@ public class ChatService {
 
     // 알림 받을 사람 = 보낸 사람과 지금 채팅방을 보고 있는 참여자를 제외한 참여자
     // (보고 있는 사람은 메시지를 바로 받고 읽음 처리되므로 알림·배지가 필요 없다)
-    public ChatMessageEmailDto saveMessageWithEmails(ChatMessage chatMessage) {
-        String senderEmail = chatMessage.getSender().getEmail();
+    public ChatMessageReceiversDto findNotificationReceivers(ChatMessage chatMessage) {
+        UUID senderId = chatMessage.getSender().getId();
         ChatRoom chatRoom = chatMessage.getChatRoom();
-        Set<String> online = chatPresence.onlineEmails(chatRoom.getType(), chatRoom.getId());
-        List<String> receiverEmails = chatRoom.getParticipants().stream()
-                .map(p -> p.getMember().getEmail())
-                .filter(email -> !email.equals(senderEmail) && !online.contains(email))
+        Set<UUID> online = chatPresence.onlineMemberIds(chatRoom.getType(), chatRoom.getId());
+        List<UUID> receiverIds = chatRoom.getParticipants().stream()
+                .map(p -> p.getMember().getId())
+                .filter(memberId -> !memberId.equals(senderId) && !online.contains(memberId))
                 .toList();
-        return new ChatMessageEmailDto(chatMessage, senderEmail, receiverEmails);
+        return new ChatMessageReceiversDto(chatMessage, senderId, receiverIds);
     }
 
     // 내 채팅방 목록 조회
@@ -169,7 +170,7 @@ public class ChatService {
                     .orElseThrow(()->new EntityNotFoundException("fridge member not found")).getType().equals(Type.MANAGER)) {
             throw new IllegalArgumentException("잘못된 접근입니다.");
         }
-        chatRoomParticipantValidator.validateParticipant(member.getEmail(), roomId, chatRoomType);
+        chatRoomParticipantValidator.validateParticipant(member.getId(), roomId, chatRoomType);
 
         return chatMessageRepository.findByChatRoom(chatRoom, pageable).map(ChatMessageDto::fromEntity);
     }
@@ -184,15 +185,15 @@ public class ChatService {
             throw new IllegalArgumentException("잘못된 접근입니다.");
         }
 
-        String receiverEmail = chatRoom.getParticipants().stream()
+        UUID receiverId = chatRoom.getParticipants().stream()
                 .filter(p -> p.getRole() == ParticipantRole.MEMBER)
-                .map(p -> p.getMember().getEmail())
+                .map(p -> p.getMember().getId())
                 .findFirst()
                 .orElse(null);
 
         return chatMessageRepository.findByChatRoom(chatRoom, pageable).map(chatMessage -> {
             ChatMessageDto dto = ChatMessageDto.fromEntity(chatMessage);
-            dto.setReceiverEmail(receiverEmail);
+            dto.setReceiverId(receiverId);
             return dto;
         });
     }
@@ -273,7 +274,7 @@ public class ChatService {
     }
 
     // 냉장고에서 내보낼 시 해당 냉장고의 공동구매 채팅방에서 모두 나가기
-    public void leaveForcePurchaseChatRoom(Long fridgeId, String memberEmail){
+    public void leaveForcePurchaseChatRoom(Long fridgeId, UUID memberId){
         Fridge fridge = fridgeRepository.findById(fridgeId).orElseThrow(()->new EntityNotFoundException("fridge not found"));
 
         // 권한 체크
@@ -282,7 +283,7 @@ public class ChatService {
             throw new AccessDeniedException("MANAGER만 가능합니다");
         }
 
-        Member member = memberRepository.findByEmail(memberEmail).orElseThrow(() -> new EntityNotFoundException("member not found"));
+        Member member = memberRepository.findById(memberId).orElseThrow(() -> new EntityNotFoundException("member not found"));
         leaveAllPurchaseChatRooms(fridge, member);
     }
 
@@ -313,14 +314,14 @@ public class ChatService {
             chatRoom.getParticipants().remove(chatParticipant);
             // 이미 맺은 구독으로 이후 메시지를 받지 않도록 커밋 뒤 구독을 끊는다
             eventPublisher.publishEvent(new ChatSubscriptionRevoked(
-                    ChatRoomType.PURCHASE, chatRoom.getId(), chatParticipant.getMember().getEmail()));
+                    ChatRoomType.PURCHASE, chatRoom.getId(), chatParticipant.getMember().getId()));
         }
     }
 
     // 채팅 메시지 사진 저장
     public List<String> uploadImages(Long roomId, ChatRoomType chatRoomType, List<MultipartFile> files){
         Member member = currentMember();
-        chatRoomParticipantValidator.validateParticipant(member.getEmail(), roomId, chatRoomType);
+        chatRoomParticipantValidator.validateParticipant(member.getId(), roomId, chatRoomType);
         return chatImageService.uploadImages(chatRoomType, roomId, files);
     }
 
@@ -337,15 +338,15 @@ public class ChatService {
         PurchasePost post = getPurchasePost(roomId);
         // 해당 냉장고 참여자인지 확인
         fridgeAccessValidator.validate(post.getChatRoom().getFridge().getId());
-        Set<String> online = chatPresence.onlineEmails(ChatRoomType.PURCHASE, roomId);
+        Set<UUID> online = chatPresence.onlineMemberIds(ChatRoomType.PURCHASE, roomId);
 
         List<ParticipantsResDto> participantsResDtos = new ArrayList<>();
         for(ChatParticipant chatParticipant : post.getChatRoom().getParticipants()){
             Member member = chatParticipant.getMember();
             participantsResDtos.add(ParticipantsResDto.builder()
                     .memberName(member.getName())
-                    .memberEmail(member.getEmail())
-                    .isOnline(online.contains(member.getEmail()))
+                    .memberId(member.getId())
+                    .isOnline(online.contains(member.getId()))
                     .isCreator(member.getId().equals(post.getCreator().getId()))
                     .profileImage(member.getProfileImage())
                     .build());
@@ -369,7 +370,7 @@ public class ChatService {
     }
 
     private Member currentMember() {
-        return memberRepository.findByEmail(SecurityContextHolder.getContext().getAuthentication().getName())
+        return memberRepository.findById(AuthMember.currentId())
                 .orElseThrow(() -> new EntityNotFoundException("member not found"));
     }
 

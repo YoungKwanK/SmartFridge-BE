@@ -1,5 +1,7 @@
 package com.be16_2nd.SmartFridge.chat.dto;
 
+import java.util.UUID;
+
 import com.be16_2nd.SmartFridge.chat.domain.ChatMessage;
 import com.be16_2nd.SmartFridge.chat.domain.ChatMessageImage;
 import com.be16_2nd.SmartFridge.member.domain.Member;
@@ -19,10 +21,11 @@ public class ChatMessageDto {
     private String chatRoomType;
     private String messageType;
     private String message;
-    private String senderEmail;
+    private UUID senderId;
     private String senderName;
     private List<String> imageUrls;
-    private String receiverEmail;
+    // 관리자 1대1 내역 조회에서만 채운다 (상대 회원 id)
+    private UUID receiverId;
 
     private String timestamp;
 
@@ -35,7 +38,7 @@ public class ChatMessageDto {
                 .timestamp(chatMessage.getCreatedTime().toString())
                 .imageUrls(chatMessage.getChatMessageImages().stream().map(ChatMessageImage::getImageUrl).toList())
                 .message(chatMessage.getContents())
-                .senderEmail(sender != null ? sender.getEmail() : null)
+                .senderId(sender != null ? sender.getId() : null)
                 .senderName(sender != null ? sender.getName() : null)
                 .build();
     }

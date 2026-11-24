@@ -1,5 +1,7 @@
 package com.be16_2nd.SmartFridge.chat.service;
 
+import java.util.UUID;
+
 import com.be16_2nd.SmartFridge.post.service.PostService;
 import com.be16_2nd.SmartFridge.support.PurchaseRoomFixture;
 import com.be16_2nd.SmartFridge.chat.domain.ChatParticipant;
@@ -115,7 +117,7 @@ class ChatRoomStructureTest {
         flushClear();
 
         login("manager@test.com");
-        fridgeService.delegateManager(fridgeId, "b@test.com");
+        fridgeService.delegateManager(fridgeId, idOf("b@test.com"));
         flushClear();
 
         assertThat(roles(managerRoomOf("a@test.com"))).containsExactlyInAnyOrderEntriesOf(Map.of(
@@ -161,7 +163,7 @@ class ChatRoomStructureTest {
     }
 
     private void send(Long roomId, ChatRoomType type, String senderEmail, String message) {
-        chatService.saveMessage(roomId, type, senderEmail, ChatMessageDto.builder()
+        chatService.saveMessage(roomId, type, idOf(senderEmail), ChatMessageDto.builder()
                 .message(message)
                 .imageUrls(List.of())
                 .build());
@@ -180,7 +182,7 @@ class ChatRoomStructureTest {
 
     private Long managerUnreadOf(String memberEmail) {
         return fridgeService.findByFridgeMember(fridgeId).stream()
-                .filter(m -> m.getMemberEmail().equals(memberEmail))
+                .filter(m -> m.getMemberId().equals(idOf(memberEmail)))
                 .map(FridgeMemberWithRoomIdResDto::getUnReadCount)
                 .findFirst().orElseThrow();
     }
@@ -191,11 +193,16 @@ class ChatRoomStructureTest {
 
     private void login(String email) {
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(email, null, List.of()));
+                new UsernamePasswordAuthenticationToken(idOf(email).toString(), null, List.of()));
     }
 
     private void flushClear() {
         em.flush();
         em.clear();
+    }
+
+    // 테스트 회원의 id (principal 이름·채팅 식별자는 회원 id)
+    private UUID idOf(String email) {
+        return memberRepository.findByEmail(email).orElseThrow().getId();
     }
 }

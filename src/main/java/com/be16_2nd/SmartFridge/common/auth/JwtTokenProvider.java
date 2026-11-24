@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.util.Date;
+import java.util.UUID;
 
 @Component
 public class JwtTokenProvider {
@@ -48,12 +49,13 @@ public class JwtTokenProvider {
 
     }
 
+    // subject 는 회원 id(UUID). 이메일은 개인정보라 토큰(누구나 디코딩 가능)에 넣지 않는다
     public String createAtToken(Member member){
-        String email = member.getEmail();
+        String memberId = member.getId().toString();
         String role = member.getRole().toString();
         Date now = new Date();
         String token = Jwts.builder()
-                .subject(email)
+                .subject(memberId)
                 .claim("role", role)
                 .issuedAt(now)
                 .expiration(new Date(now.getTime()+expiration*60*1000))
@@ -64,13 +66,13 @@ public class JwtTokenProvider {
 
     public String createRtToken(Member member) {
         // 유효 기간이 긴 rt 토큰 생성
-        String email = member.getEmail();
+        String memberId = member.getId().toString();
         String role = member.getRole().toString();
         init();
 
         Date now = new Date();
         String refreshToken = Jwts.builder()
-                .subject(email)
+                .subject(memberId)
                 .claim("role", role)
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + expirationRt * 90 * 1000L))
@@ -79,9 +81,7 @@ public class JwtTokenProvider {
 
 
         // rt 토큰을 redis에 저장 : key-value 형식으로 set
-        redisTemplate.opsForValue().set(member.getEmail(), refreshToken);
-        // 200일 TTL(유효 시간)
-//        redisTemplate.opsForValue().set(member.getEmail(), refreshToken, 200, TimeUnit.DAYS);
+        redisTemplate.opsForValue().set(memberId, refreshToken);
         return refreshToken;
     }
 
@@ -93,12 +93,12 @@ public class JwtTokenProvider {
                 .parseSignedClaims(refreshToken)
                 .getPayload();
 
-        String email = claims.getSubject();
-        Member member = memberRepository.findByEmail(email).orElseThrow(() -> new EntityNotFoundException("member is not found"));
+        UUID memberId = AuthMember.parse(claims.getSubject());
+        Member member = memberRepository.findById(memberId).orElseThrow(() -> new EntityNotFoundException("member is not found"));
 
         // redis의 값과 비교하는 검증
-        String redisRt = redisTemplate.opsForValue().get(member.getEmail());
-        if (!redisRt.equals(refreshToken)) {
+        String redisRt = redisTemplate.opsForValue().get(memberId.toString());
+        if (!refreshToken.equals(redisRt)) {
             throw new IllegalArgumentException("잘못된 토큰 입니다.");
         }
 

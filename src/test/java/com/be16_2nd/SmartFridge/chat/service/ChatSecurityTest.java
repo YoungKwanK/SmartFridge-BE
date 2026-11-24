@@ -1,5 +1,9 @@
 package com.be16_2nd.SmartFridge.chat.service;
 
+import com.be16_2nd.SmartFridge.member.repository.MemberRepository;
+
+import java.util.UUID;
+
 import com.be16_2nd.SmartFridge.post.service.PostService;
 import com.be16_2nd.SmartFridge.support.PurchaseRoomFixture;
 import com.be16_2nd.SmartFridge.chat.config.StompHandler;
@@ -41,6 +45,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ChatSecurityTest {
 
     @Autowired MemberService memberService;
+    @Autowired MemberRepository memberRepository;
     @Autowired FridgeService fridgeService;
     @Autowired FridgeRepository fridgeRepository;
     @Autowired ChatService chatService;
@@ -79,23 +84,23 @@ class ChatSecurityTest {
     }
 
     @Test
-    void 메시지_발신자는_본문의_senderEmail이_아니라_인증된_사용자다() {
-        ChatMessage saved = chatService.saveMessage(purchaseRoomId, ChatRoomType.PURCHASE, "a@sec.com",
-                ChatMessageDto.builder().senderEmail("manager@sec.com").message("위조 시도").build());
+    void 메시지_발신자는_본문의_senderId가_아니라_인증된_사용자다() {
+        ChatMessage saved = chatService.saveMessage(purchaseRoomId, ChatRoomType.PURCHASE, idOf("a@sec.com"),
+                ChatMessageDto.builder().senderId(idOf("manager@sec.com")).message("위조 시도").build());
 
         assertThat(saved.getSender().getEmail()).isEqualTo("a@sec.com");
     }
 
     @Test
     void 메시지에_외부_이미지_URL을_넣을_수_없다() {
-        assertThatThrownBy(() -> chatService.saveMessage(purchaseRoomId, ChatRoomType.PURCHASE, "a@sec.com",
+        assertThatThrownBy(() -> chatService.saveMessage(purchaseRoomId, ChatRoomType.PURCHASE, idOf("a@sec.com"),
                 ChatMessageDto.builder().imageUrls(List.of("https://evil.example.com/x.png")).build()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void 참여하지_않은_방에는_메시지를_보낼_수_없다() {
-        assertThatThrownBy(() -> chatService.saveMessage(purchaseRoomId, ChatRoomType.PURCHASE, "b@sec.com",
+        assertThatThrownBy(() -> chatService.saveMessage(purchaseRoomId, ChatRoomType.PURCHASE, idOf("b@sec.com"),
                 ChatMessageDto.builder().message("끼어들기").build()))
                 .isInstanceOf(AuthorizationServiceException.class);
     }
@@ -147,7 +152,7 @@ class ChatSecurityTest {
                 .isInstanceOf(AccessDeniedException.class);
 
         stompHandler.preSend(frame(StompCommand.SUBSCRIBE, "/topic/chat/PURCHASE/" + purchaseRoomId, "a@sec.com"), null);
-        assertThat(chatPresence.onlineEmails(ChatRoomType.PURCHASE, purchaseRoomId)).containsExactly("a@sec.com");
+        assertThat(chatPresence.onlineMemberIds(ChatRoomType.PURCHASE, purchaseRoomId)).containsExactly(idOf("a@sec.com"));
     }
 
     private Message<byte[]> frame(StompCommand command, String destination, String userEmail) {
@@ -157,7 +162,7 @@ class ChatSecurityTest {
         accessor.setSubscriptionId("sub-0");
         accessor.setSessionAttributes(new HashMap<>());
         if (userEmail != null) {
-            accessor.setUser(new UsernamePasswordAuthenticationToken(userEmail, null, List.of()));
+            accessor.setUser(new UsernamePasswordAuthenticationToken(idOf(userEmail).toString(), null, List.of()));
         }
         accessor.setLeaveMutable(true);
         return MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
@@ -165,6 +170,11 @@ class ChatSecurityTest {
 
     private void login(String email) {
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(email, null, List.of()));
+                new UsernamePasswordAuthenticationToken(idOf(email).toString(), null, List.of()));
+    }
+
+    // 테스트 회원의 id (principal 이름·채팅 식별자는 회원 id)
+    private UUID idOf(String email) {
+        return memberRepository.findByEmail(email).orElseThrow().getId();
     }
 }

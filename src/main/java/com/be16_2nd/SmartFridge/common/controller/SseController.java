@@ -1,9 +1,10 @@
 package com.be16_2nd.SmartFridge.common.controller;
 
+import com.be16_2nd.SmartFridge.common.auth.AuthMember;
+
 import com.be16_2nd.SmartFridge.common.service.SseEmitterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,12 +26,12 @@ public class SseController {
         // SSE 연결 시간: 4시간
         SseEmitter sseEmitter = new SseEmitter(14400 * 60 * 1000L);
 
-        // JWT 인증 정보에서 사용자 이메일 가져오기
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        log.info("SSE 연결 시도됨. 사용자 email: {}", email);
+        // JWT 인증 정보에서 회원 id 가져오기 (레지스트리 키)
+        String memberId = AuthMember.currentId().toString();
+        log.info("SSE 연결 시도됨. 회원 id: {}", memberId);
 
 //        // 레지스트리에 추가
-        sseEmitterRegistry.addSseEmitter(email, sseEmitter);
+        sseEmitterRegistry.addSseEmitter(memberId, sseEmitter);
         log.info("현재 registry 상태: {}", sseEmitterRegistry.getAllKeys());
 
         try {
@@ -51,7 +52,6 @@ public class SseController {
 
     @GetMapping("/disconnect/notification")
     public void unSubscribe() {
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        sseEmitterRegistry.removeEmitter(email);
+        sseEmitterRegistry.removeEmitter(AuthMember.currentId().toString());
     }
 }

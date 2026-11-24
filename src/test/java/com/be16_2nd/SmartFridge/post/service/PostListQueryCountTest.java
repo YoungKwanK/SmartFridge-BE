@@ -1,5 +1,9 @@
 package com.be16_2nd.SmartFridge.post.service;
 
+import com.be16_2nd.SmartFridge.member.repository.MemberRepository;
+
+import java.util.UUID;
+
 import com.be16_2nd.SmartFridge.fridge.dto.FridgeCreateDto;
 import com.be16_2nd.SmartFridge.fridge.service.FridgeService;
 import com.be16_2nd.SmartFridge.member.domain.SocialType;
@@ -36,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PostListQueryCountTest {
 
     @Autowired MemberService memberService;
+    @Autowired MemberRepository memberRepository;
     @Autowired FridgeService fridgeService;
     @Autowired PostService postService;
     @Autowired EntityManager em;
@@ -50,7 +55,7 @@ class PostListQueryCountTest {
         statistics.setStatisticsEnabled(true);
         memberService.socialLogin(SocialType.GOOGLE, "pl-m", "writer@pl.com", true, "작성자", null);
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken("writer@pl.com", null, List.of()));
+                new UsernamePasswordAuthenticationToken(idOf("writer@pl.com").toString(), null, List.of()));
         fridgeId = fridgeService.create(FridgeCreateDto.builder().fridgeName("목록냉장고").build()).getFridgeId();
     }
 
@@ -117,5 +122,10 @@ class PostListQueryCountTest {
     private void flushClear() {
         em.flush();
         em.clear();
+    }
+
+    // 테스트 회원의 id (principal 이름·채팅 식별자는 회원 id)
+    private UUID idOf(String email) {
+        return memberRepository.findByEmail(email).orElseThrow().getId();
     }
 }

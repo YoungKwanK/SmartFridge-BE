@@ -69,7 +69,7 @@ class InquiryAdminInfoTest {
     @BeforeEach
     void login() {
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(writer.getEmail(), null, List.of()));
+                new UsernamePasswordAuthenticationToken(writer.getId().toString(), null, List.of()));
     }
 
     @AfterEach
@@ -158,14 +158,14 @@ class InquiryAdminInfoTest {
     }
 
     private void givenWriterAndAdmin() {
-        when(memberRepository.findByEmail(writer.getEmail())).thenReturn(Optional.of(writer));
+        when(memberRepository.findById(writer.getId())).thenReturn(Optional.of(writer));
         when(adminAccountProvider.getAdmin()).thenReturn(admin);
     }
 
     private void givenAdminLoggedIn(List<Notification> notifications) {
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(admin.getEmail(), null, List.of()));
-        when(memberRepository.findByEmail(admin.getEmail())).thenReturn(Optional.of(admin));
+                new UsernamePasswordAuthenticationToken(admin.getId().toString(), null, List.of()));
+        when(memberRepository.findById(admin.getId())).thenReturn(Optional.of(admin));
         when(notificationRepository.findByReceiverOrderByIsReadAscCreatedTimeDesc(admin)).thenReturn(notifications);
     }
 

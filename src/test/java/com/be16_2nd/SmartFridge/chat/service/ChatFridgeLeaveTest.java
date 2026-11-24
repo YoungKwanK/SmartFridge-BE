@@ -1,5 +1,7 @@
 package com.be16_2nd.SmartFridge.chat.service;
 
+import java.util.UUID;
+
 import com.be16_2nd.SmartFridge.post.service.PostService;
 import com.be16_2nd.SmartFridge.support.PurchaseRoomFixture;
 import com.be16_2nd.SmartFridge.chat.domain.ChatRoomType;
@@ -96,7 +98,7 @@ class ChatFridgeLeaveTest {
     @Test
     void 강퇴해도_같은_규칙으로_정리된다() {
         login("manager@l.com");
-        fridgeService.removeMember(fridgeId, "a@l.com");
+        fridgeService.removeMember(fridgeId, idOf("a@l.com"));
         flushClear();
 
         assertThat(chatRoomRepository.findById(roomByA)).isEmpty();
@@ -111,9 +113,9 @@ class ChatFridgeLeaveTest {
         fridgeMemberRepository.deleteByFridgeAndMember(fridge, a);
         flushClear();
 
-        assertThatThrownBy(() -> participantValidator.validateParticipant("a@l.com", roomByB, ChatRoomType.PURCHASE))
+        assertThatThrownBy(() -> participantValidator.validateParticipant(idOf("a@l.com"), roomByB, ChatRoomType.PURCHASE))
                 .isInstanceOf(AuthorizationServiceException.class);
-        assertThatThrownBy(() -> chatService.saveMessage(roomByB, ChatRoomType.PURCHASE, "a@l.com",
+        assertThatThrownBy(() -> chatService.saveMessage(roomByB, ChatRoomType.PURCHASE, idOf("a@l.com"),
                 ChatMessageDto.builder().message("나간 뒤 메시지").build()))
                 .isInstanceOf(AuthorizationServiceException.class);
     }
@@ -129,11 +131,16 @@ class ChatFridgeLeaveTest {
 
     private void login(String email) {
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(email, null, List.of()));
+                new UsernamePasswordAuthenticationToken(idOf(email).toString(), null, List.of()));
     }
 
     private void flushClear() {
         em.flush();
         em.clear();
+    }
+
+    // 테스트 회원의 id (principal 이름·채팅 식별자는 회원 id)
+    private UUID idOf(String email) {
+        return memberRepository.findByEmail(email).orElseThrow().getId();
     }
 }

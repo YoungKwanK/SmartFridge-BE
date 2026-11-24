@@ -1,5 +1,9 @@
 package com.be16_2nd.SmartFridge.chat.service;
 
+import com.be16_2nd.SmartFridge.member.repository.MemberRepository;
+
+import java.util.UUID;
+
 import com.be16_2nd.SmartFridge.chat.domain.ChatMessage;
 import com.be16_2nd.SmartFridge.chat.domain.ChatRoomType;
 import com.be16_2nd.SmartFridge.chat.dto.ChatMessageDto;
@@ -40,6 +44,7 @@ class ChatSendConcurrencyTest {
     static final int MESSAGES = 12;
 
     @Autowired MemberService memberService;
+    @Autowired MemberRepository memberRepository;
     @Autowired FridgeService fridgeService;
     @Autowired FridgeRepository fridgeRepository;
     @Autowired ChatService chatService;
@@ -91,7 +96,7 @@ class ChatSendConcurrencyTest {
             futures.add(pool.submit(() -> {
                 ready.countDown();
                 start.await();
-                ChatMessage saved = chatService.saveMessage(roomId, ChatRoomType.PURCHASE, sender,
+                ChatMessage saved = chatService.saveMessage(roomId, ChatRoomType.PURCHASE, idOf(sender),
                         ChatMessageDto.builder().message(text).build());
                 sentIds.computeIfAbsent(sender, k -> new CopyOnWriteArrayList<>()).add(saved.getId());
                 return null;
@@ -114,7 +119,7 @@ class ChatSendConcurrencyTest {
         for (String sender : senders) {
             Long lastSent = sentIds.get(sender).stream().max(Long::compare).orElseThrow();
             Long lastRead = transactionTemplate.execute(s -> chatParticipantRepository
-                    .findByChatRoomIdAndMemberEmail(roomId, sender).orElseThrow().getLastReadMessageId());
+                    .findByChatRoomIdAndMemberId(roomId, idOf(sender)).orElseThrow().getLastReadMessageId());
             assertThat(lastRead).isGreaterThanOrEqualTo(lastSent);
         }
     }
@@ -125,6 +130,11 @@ class ChatSendConcurrencyTest {
 
     private void login(String email) {
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(email, null, List.of()));
+                new UsernamePasswordAuthenticationToken(idOf(email).toString(), null, List.of()));
+    }
+
+    // 테스트 회원의 id (principal 이름·채팅 식별자는 회원 id)
+    private UUID idOf(String email) {
+        return memberRepository.findByEmail(email).orElseThrow().getId();
     }
 }
