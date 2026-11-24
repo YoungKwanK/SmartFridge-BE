@@ -87,7 +87,7 @@ public class ManagerChatRoomLifecycle {
                 chatRoom.getParticipants().remove(oldManager.get());
                 // 이전 관리자는 더 이상 이 방의 참여자가 아니므로 구독을 끊는다
                 eventPublisher.publishEvent(new ChatSubscriptionRevoked(
-                        ChatRoomType.MANAGER, chatRoom.getId(), oldManager.get().getMember().getEmail()));
+                        ChatRoomType.MANAGER, chatRoom.getId(), oldManager.get().getMember().getId()));
             }
 
             boolean isNewManagersOwnRoom = chatRoom.getParticipants().stream()

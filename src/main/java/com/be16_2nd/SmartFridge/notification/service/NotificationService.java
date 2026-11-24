@@ -1,5 +1,6 @@
 package com.be16_2nd.SmartFridge.notification.service;
 
+import com.be16_2nd.SmartFridge.common.auth.AuthMember;
 import com.be16_2nd.SmartFridge.post.domain.Post;
 import com.be16_2nd.SmartFridge.post.domain.PostComment;
 import com.be16_2nd.SmartFridge.chat.domain.PurchasePost;
@@ -183,7 +184,7 @@ public class NotificationService {
         if (isActive) {
             Long fridgeId = (notification.getFridge() != null) ? notification.getFridge().getId() : null;
 
-            notificationPublisher.publish(fridgeId, receiver.getEmail()
+            notificationPublisher.publish(fridgeId, receiver.getId()
                     , notification.getContent(), notification.getNotificationType().name());
         }
     }
@@ -245,8 +246,7 @@ public class NotificationService {
     }
 
     private Member getCurrentMember() {
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        return memberRepository.findByEmail(email)
+        return memberRepository.findById(AuthMember.currentId())
                 .orElseThrow(() -> new EntityNotFoundException("없는 사용자입니다."));
     }
 

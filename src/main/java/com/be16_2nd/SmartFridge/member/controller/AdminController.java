@@ -1,5 +1,7 @@
 package com.be16_2nd.SmartFridge.member.controller;
 
+import java.util.UUID;
+
 import com.be16_2nd.SmartFridge.common.dto.CommonDto;
 import com.be16_2nd.SmartFridge.inquiry.domain.InquiryStatus;
 import com.be16_2nd.SmartFridge.inquiry.service.InquiryAdminService;
@@ -39,21 +41,21 @@ public class AdminController {
                         .build(),HttpStatus.OK);
     }
 
-    @GetMapping("/member/detail/{memberEmail}")
-    public ResponseEntity<?> memberDetail(@PathVariable String memberEmail){
+    @GetMapping("/member/detail/{memberId}")
+    public ResponseEntity<?> memberDetail(@PathVariable UUID memberId){
         return new ResponseEntity<>(
                 CommonDto.builder()
-                        .result(adminService.memberDetail(memberEmail))
+                        .result(adminService.memberDetail(memberId))
                         .status_code(HttpStatus.OK.value())
                         .status_message("회원 상세조회 성공")
                         .build(),HttpStatus.OK);
     }
 
-    @DeleteMapping("/member/delete/")
-    public ResponseEntity<?> deleteMember(@RequestBody String memberEmail){
+    @DeleteMapping("/member/delete/{memberId}")
+    public ResponseEntity<?> deleteMember(@PathVariable UUID memberId){
         return new ResponseEntity<>(
                 CommonDto.builder()
-                        .result(adminService.deleteMember(memberEmail))
+                        .result(adminService.deleteMember(memberId))
                         .status_code(HttpStatus.OK.value())
                         .status_message("회원 삭제 완료")
                         .build(),HttpStatus.OK);

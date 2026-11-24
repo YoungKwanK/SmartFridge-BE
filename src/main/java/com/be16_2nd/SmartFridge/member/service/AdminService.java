@@ -1,5 +1,8 @@
 package com.be16_2nd.SmartFridge.member.service;
 
+import com.be16_2nd.SmartFridge.common.auth.AuthMember;
+import java.util.UUID;
+
 import com.be16_2nd.SmartFridge.food.repository.FoodRepository;
 import com.be16_2nd.SmartFridge.fridge.domain.Type;
 import com.be16_2nd.SmartFridge.inquiry.domain.InquiryStatus;
@@ -45,8 +48,8 @@ public class AdminService {
                 .map(m->MemberResDto.fromEntity(m)).collect(Collectors.toList());
     }
 
-    public Member deleteMember(String memberEmail){
-        Member member = memberRepository.findByEmail(memberEmail)
+    public Member deleteMember(UUID memberId){
+        Member member = memberRepository.findById(memberId)
                 .orElseThrow(()->new EntityNotFoundException("Member Not Found"));
         // 회원 탈퇴와 같은 규칙: 식품은 등록자 없음 + 공유 식품으로 남김 (회원 삭제 cascade로 지워지지 않게 먼저 처리)
         foodRepository.releaseAllByMember(member);
@@ -65,27 +68,24 @@ public class AdminService {
                 .build();
     }
 
-    public MemberResDto memberDetail(String memberEmail){
-        Member member = memberRepository.findByEmail(memberEmail)
+    public MemberResDto memberDetail(UUID memberId){
+        Member member = memberRepository.findById(memberId)
                 .orElseThrow(()-> new EntityNotFoundException("존재하지 않는 회원입니다"));
         return MemberResDto.fromEntity(member);
     }
 
     public List<NotificationResDto> findAllNotification(){
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        Member member = memberRepository.findByEmail(email)
+        Member member = memberRepository.findById(AuthMember.currentId())
                 .orElseThrow(()->new EntityNotFoundException("ONLY ADMIN ALLOWED"));
         return toAdminNotificationDtos(notificationRepository.findByReceiverOrderByIsReadAscCreatedTimeDesc(member));
     }
     public List<NotificationResDto> findAllReadNotification(){
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        Member member = memberRepository.findByEmail(email)
+        Member member = memberRepository.findById(AuthMember.currentId())
                 .orElseThrow(()->new EntityNotFoundException("ONLY ADMIN ALLOWED"));
         return toAdminNotificationDtos(notificationRepository.findByReceiverAndIsReadTrueOrderByCreatedTimeDesc(member));
     }
     public List<NotificationResDto> findAllUnreadNotification(){
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        Member member = memberRepository.findByEmail(email)
+        Member member = memberRepository.findById(AuthMember.currentId())
                 .orElseThrow(()->new EntityNotFoundException("ONLY ADMIN ALLOWED"));
         return toAdminNotificationDtos(notificationRepository.findByReceiverAndIsReadFalseOrderByCreatedTimeDesc(member));
     }

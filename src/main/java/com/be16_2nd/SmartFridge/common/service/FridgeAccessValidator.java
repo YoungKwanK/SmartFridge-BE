@@ -1,5 +1,6 @@
 package com.be16_2nd.SmartFridge.common.service;
 
+import com.be16_2nd.SmartFridge.common.auth.AuthMember;
 import com.be16_2nd.SmartFridge.fridge.domain.Fridge;
 import com.be16_2nd.SmartFridge.fridge.domain.FridgeMember;
 import com.be16_2nd.SmartFridge.fridge.domain.Type;
@@ -22,8 +23,7 @@ public class FridgeAccessValidator {
     private final FridgeMemberRepository fridgeMemberRepository;
 
     public FridgeContext validate(Long fridgeId) {
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        Member member = memberRepository.findByEmail(email)
+        Member member = memberRepository.findById(AuthMember.currentId())
                 .orElseThrow(() -> new EntityNotFoundException("없는 사용자입니다."));
 
         if (member.getRole() == Role.ADMIN) {

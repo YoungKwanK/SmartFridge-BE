@@ -45,7 +45,7 @@ public class ChatSubscriptionRevoker implements MessageListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void revoke(ChatSubscriptionRevoked event) {
         List<ChatPresence.Subscription> subscriptions =
-                chatPresence.removeSubscriptions(event.type(), event.roomId(), event.email());
+                chatPresence.removeSubscriptions(event.type(), event.roomId(), event.memberId());
         if (subscriptions.isEmpty()) {
             return;
         }

@@ -1,5 +1,7 @@
 package com.be16_2nd.SmartFridge.notification.service;
 
+import java.util.UUID;
+
 import com.be16_2nd.SmartFridge.common.dto.SseMessageDTO;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
@@ -22,16 +24,16 @@ public class NotificationPublisher {
         this.objectMapper = objectMapper;
     }
 
-    public void publish(Long fridgeId, String receiverEmail, String contents, String type) {
-        publish(fridgeId, receiverEmail, contents, type, null);
+    public void publish(Long fridgeId, UUID receiverId, String contents, String type) {
+        publish(fridgeId, receiverId, contents, type, null);
     }
 
     // 채팅 알림: 어느 방의 메시지인지 함께 보낸다
-    public void publish(Long fridgeId, String receiverEmail, String contents, String type, Long roomId) {
+    public void publish(Long fridgeId, UUID receiverId, String contents, String type, Long roomId) {
         SseMessageDTO sseMessageDTO = SseMessageDTO.builder()
                 .type(type)
                 .fridgeId(fridgeId)
-                .receiverEmail(receiverEmail)
+                .receiverId(receiverId)
                 .contents(contents)
                 .roomId(roomId)
                 .build();
@@ -39,7 +41,7 @@ public class NotificationPublisher {
         String data;
         try {
             data = objectMapper.writeValueAsString(sseMessageDTO);
-            log.info("Redis 채널로 알림 발행. 수신자: {}", receiverEmail);
+            log.info("Redis 채널로 알림 발행. 수신자: {}", receiverId);
             redisTemplate.convertAndSend("sse-channel", data);
         } catch (JacksonException e) {
             throw new RuntimeException(e);

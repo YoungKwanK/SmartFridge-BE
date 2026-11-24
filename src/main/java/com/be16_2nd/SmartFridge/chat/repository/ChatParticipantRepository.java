@@ -1,5 +1,7 @@
 package com.be16_2nd.SmartFridge.chat.repository;
 
+import java.util.UUID;
+
 import com.be16_2nd.SmartFridge.chat.domain.ChatParticipant;
 import com.be16_2nd.SmartFridge.chat.domain.ChatRoom;
 import com.be16_2nd.SmartFridge.chat.domain.ChatRoomType;
@@ -18,7 +20,7 @@ import java.util.Optional;
 @Repository
 public interface ChatParticipantRepository extends JpaRepository<ChatParticipant, Long> {
     Optional<ChatParticipant> findByChatRoomAndMember(ChatRoom chatRoom, Member member);
-    Optional<ChatParticipant> findByChatRoomIdAndMemberEmail(Long chatRoomId, String email);
+    Optional<ChatParticipant> findByChatRoomIdAndMemberId(Long chatRoomId, UUID memberId);
     List<ChatParticipant> findByChatRoom(ChatRoom chatRoom);
 
     // 냉장고 안에서 특정 타입 방에 참여 중인 목록

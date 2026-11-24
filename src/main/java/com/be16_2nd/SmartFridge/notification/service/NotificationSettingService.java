@@ -1,5 +1,6 @@
 package com.be16_2nd.SmartFridge.notification.service;
 
+import com.be16_2nd.SmartFridge.common.auth.AuthMember;
 import com.be16_2nd.SmartFridge.member.domain.Member;
 import com.be16_2nd.SmartFridge.member.repository.MemberRepository;
 import com.be16_2nd.SmartFridge.notification.domain.NotificationSetting;
@@ -27,8 +28,7 @@ public class NotificationSettingService {
     
     // 알림 수신 여부 설정
     public void setNotification(NotificationSettingReqDto notificationSettingReqDto) {
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        Member member = memberRepository.findByEmail(email)
+        Member member = memberRepository.findById(AuthMember.currentId())
                 .orElseThrow(() -> new EntityNotFoundException("가입되지 않은 사용자입니다."));
 
         // 기존 설정 조회
