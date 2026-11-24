@@ -1,5 +1,7 @@
 package com.be16_2nd.SmartFridge.fridge.service;
 
+import java.util.UUID;
+
 import com.be16_2nd.SmartFridge.chat.service.ManagerChatRoomLifecycle;
 import com.be16_2nd.SmartFridge.fridge.domain.Fridge;
 import com.be16_2nd.SmartFridge.fridge.domain.Type;
@@ -100,6 +102,11 @@ class FridgeServiceTransactionTest {
 
     private void login(String email) {
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(email, null, List.of()));
+                new UsernamePasswordAuthenticationToken(idOf(email).toString(), null, List.of()));
+    }
+
+    // 테스트 회원의 id (principal 이름·채팅 식별자는 회원 id)
+    private UUID idOf(String email) {
+        return memberRepository.findByEmail(email).orElseThrow().getId();
     }
 }

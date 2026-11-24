@@ -1,5 +1,9 @@
 package com.be16_2nd.SmartFridge.post.service;
 
+import com.be16_2nd.SmartFridge.member.repository.MemberRepository;
+
+import java.util.UUID;
+
 import com.be16_2nd.SmartFridge.chat.domain.PurchasePost;
 import com.be16_2nd.SmartFridge.chat.repository.ChatRoomRepository;
 import com.be16_2nd.SmartFridge.chat.repository.PurchasePostRepository;
@@ -44,6 +48,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class PurchasePostLinkTest {
 
     @Autowired MemberService memberService;
+    @Autowired MemberRepository memberRepository;
     @Autowired FridgeService fridgeService;
     @Autowired FridgeRepository fridgeRepository;
     @Autowired PostService postService;
@@ -216,11 +221,16 @@ class PurchasePostLinkTest {
 
     private void login(String email) {
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(email, null, List.of()));
+                new UsernamePasswordAuthenticationToken(idOf(email).toString(), null, List.of()));
     }
 
     private void flushClear() {
         em.flush();
         em.clear();
+    }
+
+    // 테스트 회원의 id (principal 이름·채팅 식별자는 회원 id)
+    private UUID idOf(String email) {
+        return memberRepository.findByEmail(email).orElseThrow().getId();
     }
 }

@@ -144,8 +144,8 @@ class InquiryOwnerCheckTest {
 
     private void loginAs(Member member) {
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(member.getEmail(), null, List.of()));
-        when(memberRepository.findByEmail(member.getEmail())).thenReturn(Optional.of(member));
+                new UsernamePasswordAuthenticationToken(member.getId().toString(), null, List.of()));
+        when(memberRepository.findById(member.getId())).thenReturn(Optional.of(member));
     }
 
     private InquiryUpdateDto updateDto(String title) {

@@ -30,6 +30,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -62,8 +63,8 @@ class FridgeLeaveFoodRuleTest {
 
     final Long fridgeId = 1L;
     final Fridge fridge = Fridge.builder().id(fridgeId).fridgeName("우리집 냉장고").build();
-    final Member manager = Member.builder().name("관리자").email("manager@test.com").build();
-    final Member member = Member.builder().name("홍길동").email("user@test.com").build();
+    final Member manager = Member.builder().id(UUID.randomUUID()).name("관리자").email("manager@test.com").build();
+    final Member member = Member.builder().id(UUID.randomUUID()).name("홍길동").email("user@test.com").build();
 
     @AfterEach
     void clearSecurityContext() {
@@ -98,11 +99,11 @@ class FridgeLeaveFoodRuleTest {
     void 강퇴를_하면_강퇴된_멤버의_식품을_남긴다() {
         when(fridgeAccessValidator.validate(fridgeId))
                 .thenReturn(new FridgeAccessValidator.FridgeContext(fridge, manager, Type.MANAGER));
-        when(memberRepository.findByEmail("user@test.com")).thenReturn(Optional.of(member));
+        when(memberRepository.findById(member.getId())).thenReturn(Optional.of(member));
         FridgeMember fridgeMember = FridgeMember.builder().fridge(fridge).member(member).type(Type.COMMON).build();
         when(fridgeMemberRepository.findByFridgeAndMember(fridge, member)).thenReturn(Optional.of(fridgeMember));
 
-        fridgeService.removeMember(fridgeId, "user@test.com");
+        fridgeService.removeMember(fridgeId, member.getId());
 
         verify(fridgeMemberRepository).delete(fridgeMember);
         verify(foodRepository).releaseAllByFridgeAndMember(fridge, member);
@@ -111,8 +112,8 @@ class FridgeLeaveFoodRuleTest {
     @Test
     void 회원_탈퇴를_하면_회원을_지우기_전에_모든_냉장고의_식품을_남긴다() {
         SecurityContextHolder.getContext()
-                .setAuthentication(new UsernamePasswordAuthenticationToken("user@test.com", null, List.of()));
-        when(memberRepository.findByEmail("user@test.com")).thenReturn(Optional.of(member));
+                .setAuthentication(new UsernamePasswordAuthenticationToken(member.getId().toString(), null, List.of()));
+        when(memberRepository.findById(member.getId())).thenReturn(Optional.of(member));
         when(fridgeMemberRepository.findAllByMember(member))
                 .thenReturn(List.of(FridgeMember.builder().fridge(fridge).member(member).type(Type.COMMON).build()));
 
@@ -127,8 +128,8 @@ class FridgeLeaveFoodRuleTest {
     @Test
     void 관리자인_냉장고가_있으면_탈퇴할_수_없고_식품도_그대로다() {
         SecurityContextHolder.getContext()
-                .setAuthentication(new UsernamePasswordAuthenticationToken("manager@test.com", null, List.of()));
-        when(memberRepository.findByEmail("manager@test.com")).thenReturn(Optional.of(manager));
+                .setAuthentication(new UsernamePasswordAuthenticationToken(manager.getId().toString(), null, List.of()));
+        when(memberRepository.findById(manager.getId())).thenReturn(Optional.of(manager));
         when(fridgeMemberRepository.findAllByMember(manager))
                 .thenReturn(List.of(FridgeMember.builder().fridge(fridge).member(manager).type(Type.MANAGER).build()));
 
@@ -141,9 +142,9 @@ class FridgeLeaveFoodRuleTest {
 
     @Test
     void 관리자_강제_탈퇴도_회원을_지우기_전에_식품을_남긴다() {
-        when(memberRepository.findByEmail("user@test.com")).thenReturn(Optional.of(member));
+        when(memberRepository.findById(member.getId())).thenReturn(Optional.of(member));
 
-        adminService.deleteMember("user@test.com");
+        adminService.deleteMember(member.getId());
 
         InOrder order = inOrder(foodRepository, memberRepository);
         order.verify(foodRepository).releaseAllByMember(member);

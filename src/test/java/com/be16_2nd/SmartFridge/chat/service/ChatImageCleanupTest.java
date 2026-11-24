@@ -156,13 +156,18 @@ class ChatImageCleanupTest {
     private String sendImage(ChatRoomType type, Long targetRoomId, String senderEmail) {
         String key = ChatImageService.keyPrefix(type, targetRoomId) + UUID.randomUUID() + ".jpg";
         String url = s3Client.utilities().getUrl(b -> b.bucket(bucket).key(key)).toExternalForm();
-        chatService.saveMessage(targetRoomId, type, senderEmail,
+        chatService.saveMessage(targetRoomId, type, idOf(senderEmail),
                 ChatMessageDto.builder().imageUrls(List.of(url)).build());
         return url;
     }
 
     private void login(String email) {
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(email, null, List.of()));
+                new UsernamePasswordAuthenticationToken(idOf(email).toString(), null, List.of()));
+    }
+
+    // 테스트 회원의 id (principal 이름·채팅 식별자는 회원 id)
+    private UUID idOf(String email) {
+        return memberRepository.findByEmail(email).orElseThrow().getId();
     }
 }

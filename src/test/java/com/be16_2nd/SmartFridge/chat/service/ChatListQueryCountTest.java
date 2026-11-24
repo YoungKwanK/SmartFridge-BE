@@ -1,5 +1,9 @@
 package com.be16_2nd.SmartFridge.chat.service;
 
+import com.be16_2nd.SmartFridge.member.repository.MemberRepository;
+
+import java.util.UUID;
+
 import com.be16_2nd.SmartFridge.post.service.PostService;
 import com.be16_2nd.SmartFridge.chat.repository.PurchasePostRepository;
 import com.be16_2nd.SmartFridge.support.PurchaseRoomFixture;
@@ -39,6 +43,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ChatListQueryCountTest {
 
     @Autowired MemberService memberService;
+    @Autowired MemberRepository memberRepository;
     @Autowired FridgeService fridgeService;
     @Autowired FridgeRepository fridgeRepository;
     @Autowired ChatService chatService;
@@ -89,7 +94,7 @@ class ChatListQueryCountTest {
         // 방마다 개설자 + 나 = 2명. 참여 전 메시지는 읽음 처리되므로, 참여 후 보낸 메시지만 안 읽은 수에 잡힌다
         List<Long> roomIds = addRoomsJoinedByMe(2);
         String creator = "member" + (memberSeq - 1) + "@q.com";
-        chatService.saveMessage(roomIds.get(1), ChatRoomType.PURCHASE, creator, ChatMessageDto.builder().message("하나 더").build());
+        chatService.saveMessage(roomIds.get(1), ChatRoomType.PURCHASE, idOf(creator), ChatMessageDto.builder().message("하나 더").build());
         flushClear();
 
         login("me@q.com");
@@ -115,15 +120,15 @@ class ChatListQueryCountTest {
 
         // me 가 관리자에게 2개 보냄 → 관리자 기준 me 의 방만 2
         Long myRoomId = fridgeService.findByFridgeMember(fridgeId).stream()
-                .filter(m -> m.getMemberEmail().equals("me@q.com")).findFirst().orElseThrow().getRoomId();
-        chatService.saveMessage(myRoomId, ChatRoomType.MANAGER, "me@q.com", ChatMessageDto.builder().message("1").build());
-        chatService.saveMessage(myRoomId, ChatRoomType.MANAGER, "me@q.com", ChatMessageDto.builder().message("2").build());
+                .filter(m -> m.getMemberId().equals(idOf("me@q.com"))).findFirst().orElseThrow().getRoomId();
+        chatService.saveMessage(myRoomId, ChatRoomType.MANAGER, idOf("me@q.com"), ChatMessageDto.builder().message("1").build());
+        chatService.saveMessage(myRoomId, ChatRoomType.MANAGER, idOf("me@q.com"), ChatMessageDto.builder().message("2").build());
         flushClear();
 
         login("manager@q.com");
-        Map<String, Long> unread = fridgeService.findByFridgeMember(fridgeId).stream()
-                .collect(Collectors.toMap(FridgeMemberWithRoomIdResDto::getMemberEmail, FridgeMemberWithRoomIdResDto::getUnReadCount));
-        assertThat(unread.get("me@q.com")).isEqualTo(2L);
+        Map<UUID, Long> unread = fridgeService.findByFridgeMember(fridgeId).stream()
+                .collect(Collectors.toMap(FridgeMemberWithRoomIdResDto::getMemberId, FridgeMemberWithRoomIdResDto::getUnReadCount));
+        assertThat(unread.get(idOf("me@q.com"))).isEqualTo(2L);
         assertThat(unread.values().stream().mapToLong(Long::longValue).sum()).isEqualTo(2L);
     }
 
@@ -134,7 +139,7 @@ class ChatListQueryCountTest {
             String creator = addMembers(1).get(0);
             login(creator);
             Long roomId = PurchaseRoomFixture.openRoom(postService, purchasePostRepository, fridgeId, "공구" + roomId(i), 5);
-            chatService.saveMessage(roomId, ChatRoomType.PURCHASE, creator, ChatMessageDto.builder().message("안녕").build());
+            chatService.saveMessage(roomId, ChatRoomType.PURCHASE, idOf(creator), ChatMessageDto.builder().message("안녕").build());
             login("me@q.com");
             chatService.addParticipantToPurchaseChat(roomId);
             roomIds.add(roomId);
@@ -170,11 +175,16 @@ class ChatListQueryCountTest {
 
     private void login(String email) {
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(email, null, List.of()));
+                new UsernamePasswordAuthenticationToken(idOf(email).toString(), null, List.of()));
     }
 
     private void flushClear() {
         em.flush();
         em.clear();
+    }
+
+    // 테스트 회원의 id (principal 이름·채팅 식별자는 회원 id)
+    private UUID idOf(String email) {
+        return memberRepository.findByEmail(email).orElseThrow().getId();
     }
 }

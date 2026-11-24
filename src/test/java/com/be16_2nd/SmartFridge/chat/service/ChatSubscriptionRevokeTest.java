@@ -1,5 +1,9 @@
 package com.be16_2nd.SmartFridge.chat.service;
 
+import com.be16_2nd.SmartFridge.member.repository.MemberRepository;
+
+import java.util.UUID;
+
 import com.be16_2nd.SmartFridge.chat.domain.ChatRoomType;
 import com.be16_2nd.SmartFridge.chat.repository.PurchasePostRepository;
 import com.be16_2nd.SmartFridge.fridge.dto.FridgeCreateDto;
@@ -46,8 +50,12 @@ class ChatSubscriptionRevokeTest {
     // DB에 없는 방 id (브로커·Redis만 쓰는 테스트용)
     static final long ROOM = 990_101L;
     static final String DESTINATION = "/topic/chat/PURCHASE/" + ROOM;
+    // DB에 없는 회원 id (브로커·Redis만 쓰는 테스트용)
+    static final UUID B = UUID.fromString("00000000-0000-0000-0000-00000000000b");
+    static final UUID C = UUID.fromString("00000000-0000-0000-0000-00000000000c");
 
     @Autowired ApplicationEvents events;
+    @Autowired MemberRepository memberRepository;
     @Autowired MemberService memberService;
     @Autowired FridgeService fridgeService;
     @Autowired FridgeRepository fridgeRepository;
@@ -73,7 +81,7 @@ class ChatSubscriptionRevokeTest {
         login("b@r.com");
         chatService.leavePurchaseChatRoom(f.roomId());
 
-        assertThat(revokedEvents()).containsExactly(new ChatSubscriptionRevoked(ChatRoomType.PURCHASE, f.roomId(), "b@r.com"));
+        assertThat(revokedEvents()).containsExactly(new ChatSubscriptionRevoked(ChatRoomType.PURCHASE, f.roomId(), idOf("b@r.com")));
     }
 
     @Test
@@ -81,9 +89,9 @@ class ChatSubscriptionRevokeTest {
         Fixture f = purchaseRoomWithMember();
 
         login("a@r.com");
-        fridgeService.removeMember(f.fridgeId(), "b@r.com");
+        fridgeService.removeMember(f.fridgeId(), idOf("b@r.com"));
 
-        assertThat(revokedEvents()).contains(new ChatSubscriptionRevoked(ChatRoomType.PURCHASE, f.roomId(), "b@r.com"));
+        assertThat(revokedEvents()).contains(new ChatSubscriptionRevoked(ChatRoomType.PURCHASE, f.roomId(), idOf("b@r.com")));
     }
 
     @Test
@@ -91,20 +99,20 @@ class ChatSubscriptionRevokeTest {
         Fixture f = purchaseRoomWithMember();
 
         login("a@r.com");
-        fridgeService.delegateManager(f.fridgeId(), "b@r.com");
+        fridgeService.delegateManager(f.fridgeId(), idOf("b@r.com"));
 
         assertThat(revokedEvents())
                 .isNotEmpty()
-                .allMatch(e -> e.type() == ChatRoomType.MANAGER && e.email().equals("a@r.com"));
+                .allMatch(e -> e.type() == ChatRoomType.MANAGER && e.memberId().equals(idOf("a@r.com")));
     }
 
     @Test
     void 해제_이벤트를_받으면_그_회원의_구독만_브로커와_접속_목록에서_지워진다() throws InterruptedException {
-        subscribe("s-b", "sub-0", "b@r.com");
-        subscribe("s-b2", "sub-3", "b@r.com");   // 같은 회원의 다른 탭
-        subscribe("s-c", "sub-0", "c@r.com");
+        subscribe("s-b", "sub-0", B);
+        subscribe("s-b2", "sub-3", B);   // 같은 회원의 다른 탭
+        subscribe("s-c", "sub-0", C);
 
-        revoker.revoke(new ChatSubscriptionRevoked(ChatRoomType.PURCHASE, ROOM, "b@r.com"));
+        revoker.revoke(new ChatSubscriptionRevoked(ChatRoomType.PURCHASE, ROOM, B));
 
         // 브로커 해제는 Redis 채널을 거쳐 비동기로 처리된다
         MultiValueMap<String, String> remaining = brokerSubscriptions();
@@ -113,15 +121,15 @@ class ChatSubscriptionRevokeTest {
             remaining = brokerSubscriptions();
         }
         assertThat(remaining.keySet()).containsExactly("s-c");
-        assertThat(chatPresence.onlineEmails(ChatRoomType.PURCHASE, ROOM)).containsExactly("c@r.com");
+        assertThat(chatPresence.onlineMemberIds(ChatRoomType.PURCHASE, ROOM)).containsExactly(C);
     }
 
     @Test
     void 구독이_없는_회원이면_아무것도_지우지_않는다() {
-        subscribe("s-c", "sub-0", "c@r.com");
+        subscribe("s-c", "sub-0", C);
 
-        assertThat(chatPresence.removeSubscriptions(ChatRoomType.PURCHASE, ROOM, "b@r.com")).isEmpty();
-        assertThat(chatPresence.onlineEmails(ChatRoomType.PURCHASE, ROOM)).containsExactly("c@r.com");
+        assertThat(chatPresence.removeSubscriptions(ChatRoomType.PURCHASE, ROOM, B)).isEmpty();
+        assertThat(chatPresence.onlineMemberIds(ChatRoomType.PURCHASE, ROOM)).containsExactly(C);
     }
 
     @Test
@@ -151,13 +159,13 @@ class ChatSubscriptionRevokeTest {
     }
 
     // StompHandler 가 SUBSCRIBE 때 하는 일: 브로커에 구독 등록 + 접속 목록 기록
-    private void subscribe(String sessionId, String subscriptionId, String email) {
+    private void subscribe(String sessionId, String subscriptionId, UUID memberId) {
         SimpMessageHeaderAccessor accessor = SimpMessageHeaderAccessor.create(SimpMessageType.SUBSCRIBE);
         accessor.setSessionId(sessionId);
         accessor.setSubscriptionId(subscriptionId);
         accessor.setDestination(DESTINATION);
         brokerChannel.send(MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders()));
-        chatPresence.subscribe(new HashMap<>(), sessionId, subscriptionId, ChatRoomType.PURCHASE, ROOM, email);
+        chatPresence.subscribe(new HashMap<>(), sessionId, subscriptionId, ChatRoomType.PURCHASE, ROOM, memberId.toString());
     }
 
     private MultiValueMap<String, String> brokerSubscriptions() {
@@ -169,8 +177,13 @@ class ChatSubscriptionRevokeTest {
 
     private void login(String email) {
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(email, null, List.of()));
+                new UsernamePasswordAuthenticationToken(idOf(email).toString(), null, List.of()));
     }
 
     private record Fixture(Long fridgeId, Long roomId) {}
+
+    // 테스트 회원의 id (principal 이름·채팅 식별자는 회원 id)
+    private UUID idOf(String email) {
+        return memberRepository.findByEmail(email).orElseThrow().getId();
+    }
 }
