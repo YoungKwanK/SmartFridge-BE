@@ -21,6 +21,8 @@ public class PostResDto {
     private boolean pinned;
     private Long viewCount;
     private String timeAgo;
+    // 대표 이미지 (첫 번째 첨부 이미지, 없으면 null)
+    private String thumbnailUrl;
     // 공동구매 글의 모집 현황 (공동구매 글이 아니거나 채팅방이 없으면 null)
     private PostPurchaseDto purchase;
 

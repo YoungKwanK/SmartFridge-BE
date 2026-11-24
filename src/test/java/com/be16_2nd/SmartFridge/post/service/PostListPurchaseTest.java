@@ -14,6 +14,7 @@ import com.be16_2nd.SmartFridge.post.domain.PostCategory;
 import com.be16_2nd.SmartFridge.post.dto.PostPurchaseDto;
 import com.be16_2nd.SmartFridge.post.dto.PostResDto;
 import com.be16_2nd.SmartFridge.post.dto.PostSearchDto;
+import com.be16_2nd.SmartFridge.post.repository.PostImageRepository;
 import com.be16_2nd.SmartFridge.post.repository.PostRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,12 +35,13 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 게시판 목록에 공동구매 모집 현황(인원·상태·참여 여부)을 함께 담는지 확인하는 단위 테스트.
+ * 게시판 목록에 공동구매 모집 현황(인원·상태·참여 여부)과 대표 이미지를 함께 담는지 확인하는 단위 테스트.
  * 스프링과 DB를 띄우지 않고 가짜 객체(Mock)로만 확인한다.
  */
 @ExtendWith(MockitoExtension.class)
@@ -49,6 +51,7 @@ class PostListPurchaseTest {
     @Mock PostRepository postRepository;
     @Mock PostStatsService postStatsService;
     @Mock PurchasePostRepository purchasePostRepository;
+    @Mock PostImageRepository postImageRepository;
 
     @InjectMocks PostService postService;
 
@@ -114,6 +117,38 @@ class PostListPurchaseTest {
         assertThat(result.get(0).getPurchase()).isNull();
     }
 
+    @Test
+    void 이미지가_있는_글은_첫_이미지를_대표_이미지로_담는다() {
+        loginAs(viewer);
+        givenPosts(post(10L, PostCategory.공동구매), post(20L, PostCategory.자유게시판));
+        when(purchasePostRepository.findByPostIdIn(List.of(10L))).thenReturn(List.of());
+        when(postImageRepository.findThumbnailsByPostIds(List.of(10L, 20L)))
+                .thenReturn(List.of(thumbnail(10L, "https://img/first.jpg")));
+
+        List<PostResDto> result = postService.findByPosts(fridgeId, pageable, new PostSearchDto(), "전체").getContent();
+
+        assertThat(result.get(0).getThumbnailUrl()).isEqualTo("https://img/first.jpg");
+        assertThat(result.get(1).getThumbnailUrl()).isNull();
+        verify(postImageRepository).findThumbnailsByPostIds(List.of(10L, 20L));
+    }
+
+    @Test
+    void 글이_없으면_대표_이미지를_찾지_않는다() {
+        loginAs(viewer);
+        givenPosts();
+
+        postService.findByPosts(fridgeId, pageable, new PostSearchDto(), "전체");
+
+        verify(postImageRepository, never()).findThumbnailsByPostIds(any());
+    }
+
+    private PostImageRepository.PostThumbnail thumbnail(Long postId, String imageUrl) {
+        return new PostImageRepository.PostThumbnail() {
+            public Long getPostId() { return postId; }
+            public String getImageUrl() { return imageUrl; }
+        };
+    }
+
     private void loginAs(Member who) {
         when(fridgeAccessValidator.validate(fridgeId))
                 .thenReturn(new FridgeAccessValidator.FridgeContext(fridge, who, Type.COMMON));
@@ -123,7 +158,7 @@ class PostListPurchaseTest {
     private void givenPosts(Post... posts) {
         Page<Post> page = new PageImpl<>(List.of(posts), pageable, posts.length);
         when(postRepository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(page);
-        when(postStatsService.getViewCount(anyLong())).thenReturn(0L);
+        lenient().when(postStatsService.getViewCount(anyLong())).thenReturn(0L);
     }
 
     private Post post(Long id, PostCategory category) {
