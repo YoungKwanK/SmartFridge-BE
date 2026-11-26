@@ -25,6 +25,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.List;
@@ -164,10 +165,15 @@ public class MemberService {
     }
 
     public MemberResDto updateMyProfileImage(UpdateProfielImageDto updateProfielImageDto) throws IOException {
+        MultipartFile newProfileImage = updateProfielImageDto.getNewProfileImage();
+        if (newProfileImage == null || newProfileImage.isEmpty()) {
+            throw new IllegalArgumentException("변경할 프로필 이미지를 선택해 주세요.");
+        }
+
         Member member = memberRepository.findById(AuthMember.currentId())
                 .orElseThrow(()->new EntityNotFoundException("회원을 찾을 수 없습니다."));
 
-        String profileImageUrl = s3Uploader.upload(updateProfielImageDto.getNewProfileImage());
+        String profileImageUrl = s3Uploader.upload(newProfileImage);
 
         member.updateProfileImage(profileImageUrl);
 
