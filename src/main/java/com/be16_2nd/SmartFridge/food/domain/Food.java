@@ -51,8 +51,29 @@ public class Food {
     @JoinColumn(name = "member_id")
     private Member member;
 
+    // 시각을 비우면 그날의 끝(23:59)까지로 본다. 등록과 수정이 같은 규칙을 쓴다
+    private static final int DEFAULT_EXPIRATION_HOUR = 23;
+    private static final int DEFAULT_EXPIRATION_MINUTE = 59;
+
+    /**
+     * 화면에서 받은 날짜와 시각으로 유통기한을 만든다.
+     * 날짜는 꼭 있어야 하고, 시각(시·분)은 비우면 23:59로 채운다. 범위를 벗어난 시각은 400으로 돌려준다.
+     */
+    public static LocalDateTime expirationOf(LocalDate date, Integer hour, Integer minute) {
+        if (date == null) {
+            throw new IllegalArgumentException("유통기한 날짜는 필수입니다.");
+        }
+        int h = hour != null ? hour : DEFAULT_EXPIRATION_HOUR;
+        int m = minute != null ? minute : DEFAULT_EXPIRATION_MINUTE;
+        if (h < 0 || h > 23 || m < 0 || m > 59) {
+            throw new IllegalArgumentException("유통기한 시각은 0시 0분부터 23시 59분 사이로 입력해 주세요.");
+        }
+        return date.atTime(h, m);
+    }
+
     public Food updateFood(FoodUpdateDto foodUpdateDto) {
-        LocalDateTime expirationDateTime = foodUpdateDto.getExpirationDate().atTime(foodUpdateDto.getExpirationHour(), foodUpdateDto.getExpirationMinute());
+        LocalDateTime expirationDateTime = expirationOf(foodUpdateDto.getExpirationDate(),
+                foodUpdateDto.getExpirationHour(), foodUpdateDto.getExpirationMinute());
         this.name = foodUpdateDto.getName();
         this.quantity = foodUpdateDto.getQuantity();
         this.storageType = foodUpdateDto.getStorageType();
