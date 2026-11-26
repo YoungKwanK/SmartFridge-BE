@@ -8,6 +8,7 @@ import com.be16_2nd.SmartFridge.chat.domain.ChatRoomType;
 import com.be16_2nd.SmartFridge.chat.domain.ParticipantRole;
 import com.be16_2nd.SmartFridge.fridge.domain.Fridge;
 import com.be16_2nd.SmartFridge.member.domain.Member;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -20,6 +21,8 @@ import java.util.Optional;
 @Repository
 public interface ChatParticipantRepository extends JpaRepository<ChatParticipant, Long> {
     Optional<ChatParticipant> findByChatRoomAndMember(ChatRoom chatRoom, Member member);
+    // 회원을 함께 로딩한다: 메시지 전송은 트랜잭션이 끝난 뒤 발신자 이름을 꺼내므로 프록시로 남으면 LazyInitializationException
+    @EntityGraph(attributePaths = "member")
     Optional<ChatParticipant> findByChatRoomIdAndMemberId(Long chatRoomId, UUID memberId);
     List<ChatParticipant> findByChatRoom(ChatRoom chatRoom);
 
