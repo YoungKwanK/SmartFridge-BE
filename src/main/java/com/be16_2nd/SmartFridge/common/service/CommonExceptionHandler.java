@@ -3,8 +3,10 @@ package com.be16_2nd.SmartFridge.common.service;
 import com.be16_2nd.SmartFridge.agent.exception.AgentActionException;
 import com.be16_2nd.SmartFridge.agent.exception.AgentChatException;
 import com.be16_2nd.SmartFridge.common.ai.AiException;
+import com.be16_2nd.SmartFridge.common.dto.CommonDto;
 import com.be16_2nd.SmartFridge.common.dto.CommonErrorDto;
 import com.be16_2nd.SmartFridge.inquiry.exception.InquiryConflictException;
+import com.be16_2nd.SmartFridge.member.exception.SocialAccountConflictException;
 import com.be16_2nd.SmartFridge.receipt.exception.ReceiptException;
 import com.be16_2nd.SmartFridge.recipe.service.RecipeImportInProgressException;
 import com.be16_2nd.SmartFridge.recipe.source.RecipeSourceException;
@@ -26,6 +28,7 @@ import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
 import java.sql.SQLException;
+import java.util.Map;
 import java.util.NoSuchElementException;
 
 @Slf4j
@@ -73,6 +76,21 @@ public class CommonExceptionHandler {
     public ResponseEntity<?> inquiryConflictException(InquiryConflictException e){
         log.error(e.getMessage());
         return new ResponseEntity<>(new CommonErrorDto(HttpStatus.CONFLICT.value(), e.getMessage()), HttpStatus.CONFLICT);
+    }
+
+    // 같은 이메일이 다른 소셜 계정으로 가입돼 있음: 프론트가 기존 제공자로 이어서 로그인시킬 수 있게 코드와 제공자를 담는다
+    @ExceptionHandler(SocialAccountConflictException.class)
+    public ResponseEntity<?> socialAccountConflictException(SocialAccountConflictException e){
+        log.warn(e.getMessage());
+        Map<String, String> result = Map.of(
+                "code", SocialAccountConflictException.CODE,
+                "provider", e.getRegisteredProvider().name(),
+                "providerName", e.getRegisteredProvider().getDisplayName());
+        return new ResponseEntity<>(CommonDto.builder()
+                .result(result)
+                .status_code(HttpStatus.CONFLICT.value())
+                .status_message(e.getMessage())
+                .build(), HttpStatus.CONFLICT);
     }
 
     // @Version 충돌: 다른 사람이 같은 데이터를 먼저 고치거나 지웠다
