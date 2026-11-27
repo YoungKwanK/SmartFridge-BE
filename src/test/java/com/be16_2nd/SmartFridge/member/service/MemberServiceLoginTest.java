@@ -3,6 +3,7 @@ package com.be16_2nd.SmartFridge.member.service;
 import com.be16_2nd.SmartFridge.member.domain.Member;
 import com.be16_2nd.SmartFridge.member.domain.SocialType;
 import com.be16_2nd.SmartFridge.member.dto.LoginReqDto;
+import com.be16_2nd.SmartFridge.member.exception.SocialAccountConflictException;
 import com.be16_2nd.SmartFridge.member.repository.MemberRepository;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
@@ -44,7 +45,8 @@ class MemberServiceLoginTest {
 
         assertThatThrownBy(() ->
                 memberService.socialLogin(SocialType.KAKAO, "k-2", "same@test.com", true, "회원", null))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOfSatisfying(SocialAccountConflictException.class, e ->
+                        assertThat(e.getRegisteredProvider()).isEqualTo(SocialType.GOOGLE))
                 .hasMessageContaining("구글");
         flushClear();
 
@@ -59,6 +61,17 @@ class MemberServiceLoginTest {
                 memberService.socialLogin(SocialType.KAKAO, "k-3", "victim@test.com", false, "공격자", null))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThat(memberRepository.findByEmail("victim@test.com")).isEmpty();
+    }
+
+    @Test
+    void 인증되지_않은_이메일이면_같은_이메일이_있어도_가입한_제공자를_알려주지_않음() {
+        memberService.socialLogin(SocialType.GOOGLE, "g-6", "owner@test.com", true, "주인", null);
+        flushClear();
+
+        assertThatThrownBy(() ->
+                memberService.socialLogin(SocialType.KAKAO, "k-6", "owner@test.com", false, "공격자", null))
+                .isExactlyInstanceOf(IllegalArgumentException.class)
+                .hasMessageNotContaining("구글");
     }
 
     @Test

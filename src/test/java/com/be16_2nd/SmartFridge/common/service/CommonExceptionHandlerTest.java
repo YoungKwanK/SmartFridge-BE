@@ -1,5 +1,7 @@
 package com.be16_2nd.SmartFridge.common.service;
 
+import com.be16_2nd.SmartFridge.member.domain.SocialType;
+import com.be16_2nd.SmartFridge.member.exception.SocialAccountConflictException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
@@ -34,6 +36,11 @@ class CommonExceptionHandlerTest {
         String npe() {
             String value = null;
             return value.trim();
+        }
+
+        @GetMapping("/social-conflict")
+        String socialConflict() {
+            throw new SocialAccountConflictException(SocialType.KAKAO);
         }
 
         @GetMapping("/required")
@@ -77,5 +84,16 @@ class CommonExceptionHandlerTest {
         mockMvc.perform(post("/boom"))
                 .andExpect(status().isMethodNotAllowed())
                 .andExpect(jsonPath("$.status_code").value(405));
+    }
+
+    @Test
+    void 다른_소셜계정으로_가입된_이메일이면_409와_기존_제공자를_응답한다() throws Exception {
+        mockMvc.perform(get("/social-conflict"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status_code").value(409))
+                .andExpect(jsonPath("$.status_message").value(containsString("카카오")))
+                .andExpect(jsonPath("$.result.code").value(SocialAccountConflictException.CODE))
+                .andExpect(jsonPath("$.result.provider").value("KAKAO"))
+                .andExpect(jsonPath("$.result.providerName").value("카카오"));
     }
 }
