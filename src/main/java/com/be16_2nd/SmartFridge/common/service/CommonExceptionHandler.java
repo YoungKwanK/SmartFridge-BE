@@ -14,10 +14,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.AuthorizationServiceException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.ErrorResponse;
 import org.springframework.transaction.TransactionSystemException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
@@ -148,10 +150,20 @@ public class CommonExceptionHandler {
         return new ResponseEntity<>(new CommonErrorDto(e.getStatus().value(), e.getMessage()), e.getStatus());
     }
 
+    static final String INTERNAL_ERROR_MESSAGE = "서버에서 오류가 발생했어요. 잠시 후 다시 시도해 주세요.";
+    static final String CLIENT_ERROR_MESSAGE = "요청을 처리할 수 없어요. 입력한 내용을 확인해 주세요.";
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<?> exception(Exception e){
-        log.error(e.getMessage());
-        String errorMessage = e.getMessage();
-        return new ResponseEntity<>(new CommonErrorDto(HttpStatus.INTERNAL_SERVER_ERROR.value(), errorMessage), HttpStatus.INTERNAL_SERVER_ERROR);
+        // 파라미터 누락·잘못된 본문·지원하지 않는 메서드 같은 스프링 요청 오류는 원래 상태 코드(4xx)로 돌려준다
+        if (e instanceof ErrorResponse errorResponse && errorResponse.getStatusCode().is4xxClientError()) {
+            log.warn(e.getMessage());
+            HttpStatusCode status = errorResponse.getStatusCode();
+            String detail = errorResponse.getBody().getDetail();
+            return new ResponseEntity<>(new CommonErrorDto(status.value(), detail != null ? detail : CLIENT_ERROR_MESSAGE), status);
+        }
+        // 예외 메시지에는 SQL·클래스 이름 같은 내부 정보가 담길 수 있어 응답에는 고정 문구만 보내고, 원인은 로그로 남긴다
+        log.error("처리하지 못한 예외", e);
+        return new ResponseEntity<>(new CommonErrorDto(HttpStatus.INTERNAL_SERVER_ERROR.value(), INTERNAL_ERROR_MESSAGE), HttpStatus.INTERNAL_SERVER_ERROR);
     }
 }
