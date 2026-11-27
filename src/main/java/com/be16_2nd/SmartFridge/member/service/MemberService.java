@@ -12,6 +12,7 @@ import com.be16_2nd.SmartFridge.common.service.S3Uploader;
 import com.be16_2nd.SmartFridge.member.domain.Member;
 import com.be16_2nd.SmartFridge.member.domain.Role;
 import com.be16_2nd.SmartFridge.member.domain.SocialType;
+import com.be16_2nd.SmartFridge.member.exception.SocialAccountConflictException;
 import com.be16_2nd.SmartFridge.member.dto.*;
 import com.be16_2nd.SmartFridge.member.repository.MemberRepository;
 import com.be16_2nd.SmartFridge.notification.domain.NotificationSetting;
@@ -76,6 +77,12 @@ public class MemberService {
             throw new IllegalArgumentException("이메일 제공에 동의해야 로그인할 수 있습니다.");
         }
 
+        // 인증되지 않은 이메일로 가입하면, 진짜 이메일 주인이 나중에 가입하지 못하게 막을 수 있으므로 거부
+        // 이메일 중복 검사보다 먼저 해야, 남의 이메일로 시도해서 어느 제공자로 가입됐는지 알아낼 수 없다
+        if (!emailVerified){
+            throw new IllegalArgumentException("인증된 이메일이 있는 계정으로만 가입할 수 있습니다.");
+        }
+
         Optional<Member> sameEmailMember = memberRepository.findByEmail(email);
         if (sameEmailMember.isPresent()){
             Member member = sameEmailMember.get();
@@ -85,14 +92,7 @@ public class MemberService {
             if (member.getSocialType() == null){
                 throw new IllegalArgumentException("이미 가입된 이메일입니다. 관리자에게 문의해주세요.");
             }
-            String provider = member.getSocialType().getDisplayName();
-            throw new IllegalArgumentException("이미 " + provider + "(으)로 가입된 이메일입니다. "
-                    + provider + "(으)로 로그인해주세요.");
-        }
-
-        // 인증되지 않은 이메일로 가입하면, 진짜 이메일 주인이 나중에 가입하지 못하게 막을 수 있으므로 거부
-        if (!emailVerified){
-            throw new IllegalArgumentException("인증된 이메일이 있는 계정으로만 가입할 수 있습니다.");
+            throw new SocialAccountConflictException(member.getSocialType());
         }
 
         Member member = Member.builder()
