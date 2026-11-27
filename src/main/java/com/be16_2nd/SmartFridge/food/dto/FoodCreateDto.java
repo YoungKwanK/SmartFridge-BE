@@ -31,12 +31,7 @@ public class FoodCreateDto {
     private Boolean shareable;
 
     public Food toEntity(Member member, Fridge fridge) {
-        if (expirationDate == null) {
-            throw new IllegalArgumentException("유통기한 날짜는 필수입니다.");
-        }
-        int hour = (expirationHour != null) ? expirationHour : 23;
-        int minute = (expirationMinute != null) ? expirationMinute : 59;
-        LocalDateTime expirationDateTime = expirationDate.atTime(hour, minute);
+        LocalDateTime expirationDateTime = Food.expirationOf(expirationDate, expirationHour, expirationMinute);
 
         return Food.builder()
                 .name(name)

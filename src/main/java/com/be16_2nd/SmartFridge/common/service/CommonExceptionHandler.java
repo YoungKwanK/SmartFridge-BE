@@ -9,7 +9,9 @@ import com.be16_2nd.SmartFridge.receipt.exception.ReceiptException;
 import com.be16_2nd.SmartFridge.recipe.service.RecipeImportInProgressException;
 import com.be16_2nd.SmartFridge.recipe.source.RecipeSourceException;
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.persistence.PersistenceException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -18,10 +20,12 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.AuthorizationServiceException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.ErrorResponse;
+import org.springframework.transaction.TransactionSystemException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
+import java.sql.SQLException;
 import java.util.NoSuchElementException;
 
 @Slf4j
@@ -75,6 +79,33 @@ public class CommonExceptionHandler {
     @ExceptionHandler(OptimisticLockingFailureException.class)
     public ResponseEntity<?> optimisticLockingFailureException(OptimisticLockingFailureException e){
         log.error(e.getMessage());
+        return concurrentUpdateConflict();
+    }
+
+    // MariaDB 스냅샷 격리 충돌(오류 1020 "Record has changed since last read").
+    // 같은 행을 동시에 고치면 @Version 검사보다 DB가 먼저 막는데, 스프링이 이를 낙관적 락 실패로 알아보지 못하고
+    // 일반 DB 오류로 감싸서 올려 보낸다. 원인을 따라가 1020이면 @Version 충돌과 같은 409로 돌려주고, 아니면 기존처럼 500
+    @ExceptionHandler({DataAccessException.class, TransactionSystemException.class, PersistenceException.class})
+    public ResponseEntity<?> dataAccessException(Exception e){
+        if (isSnapshotConflict(e)) {
+            log.warn("동시 수정 충돌(MariaDB 1020): {}", e.getMessage());
+            return concurrentUpdateConflict();
+        }
+        return exception(e);
+    }
+
+    private static final int MARIADB_RECORD_CHANGED = 1020;
+
+    static boolean isSnapshotConflict(Throwable e) {
+        for (Throwable cause = e; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {
+            if (cause instanceof SQLException sqlException && sqlException.getErrorCode() == MARIADB_RECORD_CHANGED) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private ResponseEntity<?> concurrentUpdateConflict() {
         return new ResponseEntity<>(new CommonErrorDto(HttpStatus.CONFLICT.value(),
                 "다른 멤버가 먼저 수정하거나 정리했어요. 목록을 새로 고친 뒤 다시 시도해 주세요."), HttpStatus.CONFLICT);
     }
