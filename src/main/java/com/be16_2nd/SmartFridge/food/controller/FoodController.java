@@ -45,21 +45,6 @@ public class FoodController {
                 HttpStatus.OK);
     }
 
-    @GetMapping("/mylist")
-    public ResponseEntity<?> myFoodList(@PathVariable("fridgeId") Long fridgeId,
-                                           @ModelAttribute FoodSearchDto foodSearchDto,
-                                           @RequestParam(required = false) Boolean isShared) {
-        List<FoodResDto> foodResDtoList = foodService.getFoodsByRole(fridgeId, foodSearchDto, isShared);
-
-        return new ResponseEntity<>(
-                CommonDto.builder()
-                        .result(foodResDtoList)
-                        .status_code(HttpStatus.OK.value())
-                        .status_message("내 식품 목록 조회 완료")
-                        .build(),
-                HttpStatus.OK);
-    }
-
     @PutMapping("/update/{foodId}")
     public ResponseEntity<?> updateFood(@PathVariable("fridgeId") Long fridgeId,
                                         @PathVariable("foodId") Long foodId,
